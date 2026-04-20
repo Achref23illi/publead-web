@@ -1,0 +1,29 @@
+{
+  "name": "publeader-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Publeader admin dashboard — Next.js 15 + Tailwind v4 + custom UI (no shadcn). Faithful 1:1 port of the prototype with glass/pro theme toggle.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "15.1.6",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
+    "@types/node": "22.10.7",
+    "@types/react": "19.0.7",
+    "@types/react-dom": "19.0.3",
+    "eslint": "9.18.0",
+    "eslint-config-next": "15.1.6",
+    "postcss": "8.5.1",
+    "tailwindcss": "^4.2.2",
+    "typescript": "5.7.3"
+  }
+}
