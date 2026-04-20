@@ -1,0 +1,9 @@
+node_modules
+.next
+.next-fresh
+.next-fresh2
+.next-verify
+*.tsbuildinfo
+.env
+.env.local
+.DS_Store
