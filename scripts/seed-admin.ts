@@ -2,7 +2,7 @@ import { auth } from "../src/lib/auth";
 import { db } from "../src/lib/db";
 
 async function main() {
-  const email = process.env.ADMIN_EMAIL ?? "admin@driveads.local";
+  const email = process.env.ADMIN_EMAIL ?? "admin@publeader.local";
   const password = process.env.ADMIN_PASSWORD ?? "admin123!";
   const name = process.env.ADMIN_NAME ?? "Admin";
 

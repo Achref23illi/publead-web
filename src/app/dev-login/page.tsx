@@ -7,7 +7,7 @@ import { authClient } from "@/lib/auth-client";
 const DEMO_USERS = [
   {
     role: "admin",
-    email: "admin@driveads.local",
+    email: "admin@publeader.local",
     password: "admin123!",
     label: "Admin",
     description: "Full agency dashboard",
@@ -15,7 +15,7 @@ const DEMO_USERS = [
   },
   {
     role: "advertiser",
-    email: "advertiser@driveads.local",
+    email: "advertiser@publeader.local",
     password: "advert123!",
     label: "Annonceur",
     description: "Acme Corp · Enterprise portal",
@@ -23,7 +23,7 @@ const DEMO_USERS = [
   },
   {
     role: "driver",
-    email: "driver@driveads.local",
+    email: "driver@publeader.local",
     password: "driver123!",
     label: "Chauffeur",
     description: "Marie Dupont · Mobile app",
@@ -31,7 +31,7 @@ const DEMO_USERS = [
   },
   {
     role: "partner",
-    email: "partner@driveads.local",
+    email: "partner@publeader.local",
     password: "partner123!",
     label: "Partenaire",
     description: "Club Neon · Borne owner",

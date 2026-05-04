@@ -11,7 +11,7 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   trustedOrigins: [
     process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
-    "driveads://",
+    "publeader://",
     "exp://",
   ],
   emailAndPassword: {
@@ -63,13 +63,13 @@ export const auth = betterAuth({
       sendVerificationOnSignUp: true,
       async sendVerificationOTP({ email, otp, type }) {
         const subjects: Record<string, string> = {
-          "sign-in": "Code de connexion DriveAds",
-          "email-verification": "Vérifiez votre email DriveAds",
-          "forget-password": "Réinitialisation mot de passe DriveAds",
+          "sign-in": "Code de connexion Publeader",
+          "email-verification": "Vérifiez votre email Publeader",
+          "forget-password": "Réinitialisation mot de passe Publeader",
         };
         await sendMail({
           to: email,
-          subject: subjects[type] ?? "Code DriveAds",
+          subject: subjects[type] ?? "Code Publeader",
           text: `Votre code: ${otp}\n\nValide 10 minutes.`,
         });
       },

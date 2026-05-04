@@ -38,14 +38,14 @@ type DemoUser = {
 
 const DEMO_USERS: DemoUser[] = [
   {
-    email: "admin@driveads.local",
+    email: "admin@publeader.local",
     password: "admin123!",
     name: "Claire Lemoine",
     role: "admin",
     phone: "+33 1 00 00 00 00",
   },
   {
-    email: "driver@driveads.local",
+    email: "driver@publeader.local",
     password: "driver123!",
     name: "Marie Dupont",
     role: "driver",
@@ -61,7 +61,7 @@ const DEMO_USERS: DemoUser[] = [
     },
   },
   {
-    email: "advertiser@driveads.local",
+    email: "advertiser@publeader.local",
     password: "advert123!",
     name: "Jean Dupont",
     role: "advertiser",
@@ -77,7 +77,7 @@ const DEMO_USERS: DemoUser[] = [
     },
   },
   {
-    email: "partner@driveads.local",
+    email: "partner@publeader.local",
     password: "partner123!",
     name: "Yanis Haddad",
     role: "partner",
