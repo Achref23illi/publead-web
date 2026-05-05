@@ -117,12 +117,7 @@ export async function POST(
   // Reconcile status to live value if needed.
   const next = expectedStatus(updated);
   if (next !== updated.status) {
-    syncStatusToDb(
-      updated._id!,
-      updated.status,
-      next,
-      updated.assignedDriverIds,
-    );
+    syncStatusToDb(updated, next);
     updated.status = next;
   }
 

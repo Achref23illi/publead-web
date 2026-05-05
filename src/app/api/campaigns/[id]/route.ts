@@ -39,12 +39,7 @@ export async function GET(
 
   const reconciled = applyExpectedStatus(doc);
   if (reconciled.status !== doc.status) {
-    syncStatusToDb(
-      doc._id!,
-      doc.status,
-      reconciled.status,
-      doc.assignedDriverIds,
-    );
+    syncStatusToDb(doc, reconciled.status);
   }
 
   return NextResponse.json({ campaign: serializeCampaign(reconciled) });

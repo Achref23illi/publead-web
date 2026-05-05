@@ -25,7 +25,7 @@ type DriverStatsResponse = {
   lifetime: {
     campaignsDone: number;
     totalKm: number;
-    totalEarnings: number;
+    totalEarningsCents: number;
     rating: number;
   };
   period: {
@@ -33,14 +33,21 @@ type DriverStatsResponse = {
     windowStart: string;
     windowEnd: string;
     campaignsDone: number;
-    earnings: number;
+    earningsCents: number;
     km: number;
     activeCampaigns: number;
     growthPercent: number;
-    monthlyEarnings: number;
-    monthlyBreakdown: { month: string; amount: number; campaigns: number }[];
+    monthlyEarningsCents: number;
+    monthlyBreakdown: {
+      month: string;
+      amountCents: number;
+      campaigns: number;
+    }[];
   };
 };
+
+const eur = (cents: number) =>
+  `${(cents / 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} €`;
 
 export function ChauffeurDetailPro({ driverId }: { driverId: string }) {
   const router = useRouter();
@@ -106,7 +113,7 @@ export function ChauffeurDetailPro({ driverId }: { driverId: string }) {
 
   const { driver, lifetime, period: p } = data;
   const max = p.monthlyBreakdown.length
-    ? Math.max(...p.monthlyBreakdown.map((m) => m.amount))
+    ? Math.max(...p.monthlyBreakdown.map((m) => m.amountCents))
     : 1;
   const growthIsUp = p.growthPercent >= 0;
 
@@ -148,7 +155,7 @@ export function ChauffeurDetailPro({ driverId }: { driverId: string }) {
       {/* Lifetime panel */}
       <div className="grid grid-12 mb-6" style={{ gap: 16 }}>
         {[
-          { l: "Total gagné", v: `${lifetime.totalEarnings.toLocaleString()} €` },
+          { l: "Total gagné", v: eur(lifetime.totalEarningsCents) },
           { l: "Km parcourus", v: `${lifetime.totalKm.toLocaleString()} km` },
           { l: "Campagnes terminées", v: String(lifetime.campaignsDone) },
           { l: "Note", v: lifetime.rating.toFixed(1) },
@@ -202,7 +209,7 @@ export function ChauffeurDetailPro({ driverId }: { driverId: string }) {
             margin: "4px 0 8px",
           }}
         >
-          {p.earnings.toLocaleString()} €
+          {eur(p.earningsCents)}
         </div>
         <div
           style={{
@@ -237,7 +244,7 @@ export function ChauffeurDetailPro({ driverId }: { driverId: string }) {
           />
           <Stat
             label="Revenus 30 j roulants"
-            value={`${p.monthlyEarnings.toLocaleString()} €`}
+            value={eur(p.monthlyEarningsCents)}
           />
         </div>
       </div>
@@ -259,7 +266,7 @@ export function ChauffeurDetailPro({ driverId }: { driverId: string }) {
                 >
                   <span style={{ fontWeight: 600 }}>{m.month}</span>
                   <span style={{ color: "var(--navy)", fontWeight: 700 }}>
-                    {m.amount.toLocaleString()} €
+                    {eur(m.amountCents)}
                   </span>
                 </div>
                 <div
@@ -277,7 +284,7 @@ export function ChauffeurDetailPro({ driverId }: { driverId: string }) {
                 >
                   <div
                     style={{
-                      width: `${(m.amount / max) * 100}%`,
+                      width: `${(m.amountCents / max) * 100}%`,
                       height: "100%",
                       background: "var(--navy)",
                     }}

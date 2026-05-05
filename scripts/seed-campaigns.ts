@@ -11,7 +11,7 @@ type SeedCampaign = {
   zones: string[];
   startDate: string;
   endDate: string;
-  reward: number;
+  rewardCents: number;
   driversNeeded: number;
   driversAssignedSeed: number;
   kmTotal: number;
@@ -31,7 +31,7 @@ const CAMPAIGNS: SeedCampaign[] = [
     zones: ["Paris Centre", "La Défense", "Champs-Élysées", "Opéra"],
     startDate: "2026-04-01",
     endDate: "2026-05-15",
-    reward: 350,
+    rewardCents: 35000,
     driversNeeded: 4,
     driversAssignedSeed: 0,
     kmTotal: 4500,
@@ -49,7 +49,7 @@ const CAMPAIGNS: SeedCampaign[] = [
     zones: ["Part-Dieu", "Bellecour", "Confluence", "Villeurbanne"],
     startDate: "2026-04-15",
     endDate: "2026-05-30",
-    reward: 280,
+    rewardCents: 28000,
     driversNeeded: 3,
     driversAssignedSeed: 0,
     kmTotal: 3500,
@@ -67,7 +67,7 @@ const CAMPAIGNS: SeedCampaign[] = [
     zones: ["Vieux-Port", "Prado", "Corniche", "Castellane"],
     startDate: "2026-06-01",
     endDate: "2026-08-31",
-    reward: 460,
+    rewardCents: 46000,
     driversNeeded: 6,
     driversAssignedSeed: 0,
     kmTotal: 8000,
@@ -85,7 +85,7 @@ const CAMPAIGNS: SeedCampaign[] = [
     zones: ["Centre-ville", "Gerland", "Vaise"],
     startDate: "2026-03-01",
     endDate: "2026-04-30",
-    reward: 320,
+    rewardCents: 32000,
     driversNeeded: 5,
     driversAssignedSeed: 0,
     kmTotal: 6000,
@@ -103,7 +103,7 @@ const CAMPAIGNS: SeedCampaign[] = [
     zones: ["Centre-ville", "CHU", "Université"],
     startDate: "2026-01-15",
     endDate: "2026-03-15",
-    reward: 250,
+    rewardCents: 25000,
     driversNeeded: 3,
     driversAssignedSeed: 0,
     kmTotal: 4000,
@@ -121,7 +121,7 @@ const CAMPAIGNS: SeedCampaign[] = [
     zones: ["Station F", "Sentier", "République", "Bastille"],
     startDate: "2026-05-01",
     endDate: "2026-06-30",
-    reward: 420,
+    rewardCents: 42000,
     driversNeeded: 5,
     driversAssignedSeed: 0,
     kmTotal: 5000,
@@ -139,7 +139,7 @@ const CAMPAIGNS: SeedCampaign[] = [
     zones: ["Part-Dieu", "Gerland", "Vénissieux", "Vaulx-en-Velin"],
     startDate: "2026-05-15",
     endDate: "2026-07-15",
-    reward: 300,
+    rewardCents: 30000,
     driversNeeded: 4,
     driversAssignedSeed: 0,
     kmTotal: 4500,
@@ -157,7 +157,7 @@ const CAMPAIGNS: SeedCampaign[] = [
     zones: ["Les Halles", "Bercy Village", "La Villette", "Disney Village"],
     startDate: "2026-06-15",
     endDate: "2026-08-15",
-    reward: 340,
+    rewardCents: 34000,
     driversNeeded: 4,
     driversAssignedSeed: 0,
     kmTotal: 4000,
@@ -175,7 +175,7 @@ const CAMPAIGNS: SeedCampaign[] = [
     zones: ["Champs-Élysées", "Place Vendôme", "Saint-Germain", "Montaigne"],
     startDate: "2026-05-01",
     endDate: "2026-07-31",
-    reward: 550,
+    rewardCents: 55000,
     driversNeeded: 3,
     driversAssignedSeed: 0,
     kmTotal: 6000,
@@ -193,7 +193,7 @@ const CAMPAIGNS: SeedCampaign[] = [
     zones: ["Vieux-Port", "Plages du Prado", "Cours Julien", "Joliette"],
     startDate: "2026-06-01",
     endDate: "2026-08-31",
-    reward: 380,
+    rewardCents: 38000,
     driversNeeded: 5,
     driversAssignedSeed: 0,
     kmTotal: 7000,
@@ -253,7 +253,7 @@ async function main() {
       startDate,
       endDate,
       durationDays,
-      reward: c.reward,
+      rewardCents: c.rewardCents,
       // Stored status is upcoming; lifecycle helper transitions on read.
       status: "upcoming",
       progress: c.kmDoneRatio,

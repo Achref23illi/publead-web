@@ -8,6 +8,12 @@ export type UserRoleName =
   | "partner"
   | "team_member";
 
+export type BankAccount = {
+  iban: string;
+  bankName?: string;
+  accountHolder?: string;
+};
+
 export type DriverDoc = {
   _id?: ObjectId;
   userId: string;
@@ -24,7 +30,12 @@ export type DriverDoc = {
   campaignsDone: number;
   rating: number;
   totalKm: number;
-  totalEarnings: number;
+  // All monetary values stored in cents to avoid float math.
+  totalEarningsCents: number;
+  availableBalanceCents: number;
+  pendingBalanceCents: number;
+  withdrawnTotalCents: number;
+  bankAccount?: BankAccount;
   documentsUploaded: boolean;
 };
 
@@ -86,7 +97,8 @@ export type CampaignDoc = {
   startDate: Date;
   endDate: Date;
   durationDays: number;
-  reward: number;
+  // Reward per assigned driver, stored in cents.
+  rewardCents: number;
   status: CampaignStatus;
   progress: number;
   kmDone: number;
@@ -115,10 +127,71 @@ export type CampaignEventDoc = {
   meta?: Record<string, unknown>;
 };
 
+export type TransactionType =
+  | "campaign_completion"
+  | "withdrawal_debit"
+  | "withdrawal_refund"
+  | "adjustment";
+
+// Settlement applies only to campaign_completion: amounts are 'pending' until
+// the holdDays window passes, then become 'available' on read.
+// Withdrawal debits are always available-tier (already deducted at request).
+export type TransactionTier = "pending" | "available";
+
+export type TransactionDoc = {
+  _id?: ObjectId;
+  driverId: string;
+  type: TransactionType;
+  amountCents: number; // signed: credits positive, debits negative
+  tier: TransactionTier;
+  // Date amount becomes 'available'. For pending campaign credits this is
+  // createdAt + holdDays; for instant entries it equals createdAt.
+  availableAt: Date;
+  createdAt: Date;
+  // Linked context, depending on type
+  campaignId?: string;
+  withdrawalId?: string;
+  description: string;
+  meta?: Record<string, unknown>;
+};
+
+export type WithdrawalStatus =
+  | "pending"
+  | "paid"
+  | "rejected";
+
+export type WithdrawalDoc = {
+  _id?: ObjectId;
+  driverId: string;
+  amountCents: number; // always positive
+  status: WithdrawalStatus;
+  iban: string;
+  bankName?: string;
+  accountHolder?: string;
+  debitTransactionId: string;
+  refundTransactionId?: string;
+  createdAt: Date;
+  processedAt?: Date;
+  processedBy?: string; // admin user id
+  rejectReason?: string;
+  payoutReference?: string; // admin's bank reference once paid
+};
+
+export type AppConfigDoc = {
+  _id?: ObjectId;
+  key: "payments";
+  withdrawalMinCents: number;
+  pendingHoldDays: number;
+  updatedAt: Date;
+};
+
 export const Collections = {
   drivers: "drivers",
   companies: "companies",
   partners: "partners",
   campaigns: "campaigns",
   campaignEvents: "campaign_events",
+  transactions: "transactions",
+  withdrawals: "withdrawals",
+  appConfig: "app_config",
 } as const;

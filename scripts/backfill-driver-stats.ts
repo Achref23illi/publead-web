@@ -15,7 +15,7 @@ async function main() {
     const stats = await recomputeLifetimeStats(id);
     console.log(
       `[backfill] ${d.firstName} ${d.lastName} (${id}): ` +
-        `campaigns=${stats.campaignsDone} km=${stats.totalKm} earnings=${stats.totalEarnings}`,
+        `campaigns=${stats.campaignsDone} km=${stats.totalKm} earnings=${(stats.totalEarningsCents / 100).toFixed(2)}€`,
     );
   }
 

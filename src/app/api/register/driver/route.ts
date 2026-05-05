@@ -76,7 +76,10 @@ export async function POST(req: NextRequest) {
     campaignsDone: 0,
     rating: 0,
     totalKm: 0,
-    totalEarnings: 0,
+    totalEarningsCents: 0,
+    availableBalanceCents: 0,
+    pendingBalanceCents: 0,
+    withdrawnTotalCents: 0,
     documentsUploaded: false,
   };
   const ins = await db.collection(Collections.drivers).insertOne(driverDoc);

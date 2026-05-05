@@ -12,7 +12,7 @@ export type CampaignDTO = {
   startDate: string;
   endDate: string;
   durationDays: number;
-  reward: number;
+  rewardCents: number;
   status: CampaignDoc["status"];
   progress: number;
   kmDone: number;
@@ -37,7 +37,7 @@ export function serializeCampaign(c: CampaignDoc): CampaignDTO {
     startDate: c.startDate.toISOString(),
     endDate: c.endDate.toISOString(),
     durationDays: c.durationDays,
-    reward: c.reward,
+    rewardCents: c.rewardCents,
     status: c.status,
     progress: c.progress,
     kmDone: c.kmDone,

@@ -14,7 +14,7 @@ const PERIOD_DAYS: Record<StatsPeriod, number> = {
 export type LifetimeStats = {
   campaignsDone: number;
   totalKm: number;
-  totalEarnings: number;
+  totalEarningsCents: number;
 };
 
 export type PeriodStats = {
@@ -22,22 +22,29 @@ export type PeriodStats = {
   windowStart: string;
   windowEnd: string;
   campaignsDone: number;
-  earnings: number;
+  earningsCents: number;
   km: number;
   activeCampaigns: number;
   growthPercent: number; // vs same-length immediately-prior period
-  monthlyEarnings: number; // 30-day rolling, regardless of selected period
-  monthlyBreakdown: { month: string; amount: number; campaigns: number }[];
+  monthlyEarningsCents: number; // 30-day rolling, regardless of selected period
+  monthlyBreakdown: {
+    month: string;
+    amountCents: number;
+    campaigns: number;
+  }[];
 };
 
 // Per-driver km split: campaign km credited evenly across assigned drivers.
 // Reward also flat per-completion. Rough but consistent until per-driver
 // tracking lands (D5).
-function shareForDriver(c: CampaignDoc): { km: number; earnings: number } {
+function shareForDriver(c: CampaignDoc): {
+  km: number;
+  earningsCents: number;
+} {
   const split = Math.max(1, c.driversAssigned);
   return {
     km: Math.round((c.kmDone || c.kmTotal) / split),
-    earnings: c.reward,
+    earningsCents: c.rewardCents,
   };
 }
 
@@ -60,16 +67,20 @@ export async function recomputeLifetimeStats(
 
   let campaignsDone = 0;
   let totalKm = 0;
-  let totalEarnings = 0;
+  let totalEarningsCents = 0;
 
   for (const c of completed) {
     const share = shareForDriver(c);
     campaignsDone += 1;
     totalKm += share.km;
-    totalEarnings += share.earnings;
+    totalEarningsCents += share.earningsCents;
   }
 
-  const lifetime: LifetimeStats = { campaignsDone, totalKm, totalEarnings };
+  const lifetime: LifetimeStats = {
+    campaignsDone,
+    totalKm,
+    totalEarningsCents,
+  };
 
   await db.collection(Collections.drivers).updateOne(
     { _id: new ObjectId(driverId) },
@@ -77,7 +88,7 @@ export async function recomputeLifetimeStats(
       $set: {
         campaignsDone: lifetime.campaignsDone,
         totalKm: lifetime.totalKm,
-        totalEarnings: lifetime.totalEarnings,
+        totalEarningsCents: lifetime.totalEarningsCents,
       },
     },
   );
@@ -106,14 +117,17 @@ export async function computePeriodStats(
   const all = await findCampaignsForDriver(driverId);
 
   let activeCampaigns = 0;
-  let currentEarnings = 0;
+  let currentEarningsCents = 0;
   let currentKm = 0;
   let currentDone = 0;
-  let priorEarnings = 0;
-  let monthlyEarnings = 0;
+  let priorEarningsCents = 0;
+  let monthlyEarningsCents = 0;
 
   // Monthly breakdown for last 6 months.
-  const monthlyMap = new Map<string, { amount: number; campaigns: number }>();
+  const monthlyMap = new Map<
+    string,
+    { amountCents: number; campaigns: number }
+  >();
   const sixMonthsAgo = new Date(
     now.getFullYear(),
     now.getMonth() - 5,
@@ -131,20 +145,23 @@ export async function computePeriodStats(
 
       if (completedAt >= windowStart && completedAt <= windowEnd) {
         currentDone += 1;
-        currentEarnings += share.earnings;
+        currentEarningsCents += share.earningsCents;
         currentKm += share.km;
       }
       if (completedAt >= priorStart && completedAt < windowStart) {
-        priorEarnings += share.earnings;
+        priorEarningsCents += share.earningsCents;
       }
       if (completedAt >= monthAgo && completedAt <= now) {
-        monthlyEarnings += share.earnings;
+        monthlyEarningsCents += share.earningsCents;
       }
       if (completedAt >= sixMonthsAgo && completedAt <= now) {
         const key = monthKey(startOfMonth(completedAt));
-        const prev = monthlyMap.get(key) ?? { amount: 0, campaigns: 0 };
+        const prev = monthlyMap.get(key) ?? {
+          amountCents: 0,
+          campaigns: 0,
+        };
         monthlyMap.set(key, {
-          amount: prev.amount + share.earnings,
+          amountCents: prev.amountCents + share.earningsCents,
           campaigns: prev.campaigns + 1,
         });
       }
@@ -152,14 +169,22 @@ export async function computePeriodStats(
   }
 
   const growthPercent =
-    priorEarnings > 0
-      ? Math.round(((currentEarnings - priorEarnings) / priorEarnings) * 100)
-      : currentEarnings > 0
+    priorEarningsCents > 0
+      ? Math.round(
+          ((currentEarningsCents - priorEarningsCents) /
+            priorEarningsCents) *
+            100,
+        )
+      : currentEarningsCents > 0
         ? 100
         : 0;
 
   const monthlyBreakdown = Array.from(monthlyMap.entries())
-    .map(([month, v]) => ({ month, amount: v.amount, campaigns: v.campaigns }))
+    .map(([month, v]) => ({
+      month,
+      amountCents: v.amountCents,
+      campaigns: v.campaigns,
+    }))
     .reverse(); // most recent first
 
   return {
@@ -167,11 +192,11 @@ export async function computePeriodStats(
     windowStart: windowStart.toISOString(),
     windowEnd: windowEnd.toISOString(),
     campaignsDone: currentDone,
-    earnings: currentEarnings,
+    earningsCents: currentEarningsCents,
     km: currentKm,
     activeCampaigns,
     growthPercent,
-    monthlyEarnings,
+    monthlyEarningsCents,
     monthlyBreakdown,
   };
 }

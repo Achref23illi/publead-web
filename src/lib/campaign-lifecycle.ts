@@ -2,6 +2,7 @@ import { db } from "./db";
 import { Collections, type CampaignDoc, type CampaignStatus } from "./schemas";
 import { ObjectId } from "mongodb";
 import { recomputeLifetimeStats } from "./driver-stats";
+import { creditCampaignCompletion } from "./wallet";
 
 export function expectedStatus(
   campaign: Pick<CampaignDoc, "status" | "startDate" | "endDate">,
@@ -24,17 +25,23 @@ export function applyExpectedStatus<T extends CampaignDoc>(
 }
 
 // Fire-and-forget DB sync. Caller should not await.
-// When transitioning to 'completed', recomputes lifetime stats for every
-// assigned driver — keeps DriverDoc snapshots in sync with reality.
+// When transitioning to 'completed', credits each assigned driver in the
+// ledger (idempotent) and recomputes their snapshots.
 export function syncStatusToDb(
-  campaignId: ObjectId | string,
-  fromStatus: CampaignStatus,
+  campaign: Pick<
+    CampaignDoc,
+    "_id" | "status" | "assignedDriverIds" | "brand" | "title" | "rewardCents" | "endDate"
+  >,
   toStatus: CampaignStatus,
-  assignedDriverIds: string[] = [],
 ): void {
+  const fromStatus = campaign.status;
   if (fromStatus === toStatus) return;
   const _id =
-    typeof campaignId === "string" ? new ObjectId(campaignId) : campaignId;
+    typeof campaign._id === "string"
+      ? new ObjectId(campaign._id)
+      : campaign._id!;
+  const campaignIdStr = _id.toString();
+
   Promise.all([
     db
       .collection(Collections.campaigns)
@@ -43,24 +50,40 @@ export function syncStatusToDb(
         { $set: { status: toStatus, updatedAt: new Date() } },
       ),
     db.collection(Collections.campaignEvents).insertOne({
-      campaignId: _id.toString(),
+      campaignId: campaignIdStr,
       type: "status_change",
       at: new Date(),
       meta: { from: fromStatus, to: toStatus, source: "auto" },
     }),
   ])
     .then(async () => {
-      if (toStatus === "completed" && assignedDriverIds.length > 0) {
-        await Promise.all(
-          assignedDriverIds.map((id) =>
-            recomputeLifetimeStats(id).catch((e) =>
-              console.warn(
-                `[campaign-lifecycle] recompute lifetime failed for driver ${id}`,
-                e,
-              ),
-            ),
-          ),
-        );
+      if (toStatus === "completed" && campaign.assignedDriverIds.length > 0) {
+        // Credit ledger first (idempotent), then recompute lifetime + wallet.
+        for (const driverId of campaign.assignedDriverIds) {
+          try {
+            await creditCampaignCompletion({
+              driverId,
+              campaignId: campaignIdStr,
+              amountCents: campaign.rewardCents,
+              brand: campaign.brand,
+              campaignTitle: campaign.title,
+              completedAt: campaign.endDate,
+            });
+          } catch (e) {
+            console.warn(
+              `[campaign-lifecycle] credit failed for driver ${driverId}`,
+              e,
+            );
+          }
+          try {
+            await recomputeLifetimeStats(driverId);
+          } catch (e) {
+            console.warn(
+              `[campaign-lifecycle] recompute lifetime failed for driver ${driverId}`,
+              e,
+            );
+          }
+        }
       }
     })
     .catch((err) => {
@@ -75,7 +98,7 @@ export function reconcileMany<T extends CampaignDoc>(
   return campaigns.map((c) => {
     const next = expectedStatus(c, now);
     if (next !== c.status && c._id) {
-      syncStatusToDb(c._id, c.status, next, c.assignedDriverIds);
+      syncStatusToDb(c, next);
       return { ...c, status: next };
     }
     return c;

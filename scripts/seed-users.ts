@@ -155,7 +155,10 @@ async function createDriver(userId: string, u: DemoUser) {
     campaignsDone: 12,
     rating: 4.9,
     totalKm: 18500,
-    totalEarnings: 4320,
+    totalEarningsCents: 432000,
+    availableBalanceCents: 0,
+    pendingBalanceCents: 0,
+    withdrawnTotalCents: 0,
     documentsUploaded: true,
   });
   await db

@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     lifetime: {
       campaignsDone: driver.campaignsDone ?? 0,
       totalKm: driver.totalKm ?? 0,
-      totalEarnings: driver.totalEarnings ?? 0,
+      totalEarningsCents: driver.totalEarningsCents ?? 0,
       rating: driver.rating ?? 0,
     },
     period: periodStats,

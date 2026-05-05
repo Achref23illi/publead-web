@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { Collections } from "@/lib/schemas";
 import { ObjectId } from "mongodb";
 import { computePeriodStats } from "@/lib/driver-stats";
+import { recomputeWallet } from "@/lib/wallet";
 
 export async function GET(req: NextRequest) {
   const session = await auth.api.getSession({ headers: req.headers });
@@ -30,11 +31,16 @@ export async function GET(req: NextRequest) {
       .collection(Collections.drivers)
       .findOne({ _id: new ObjectId(user.driverId) });
     if (driver) {
-      // Home screen needs monthlyEarnings + growthPercent in addition to
-      // lifetime totals. Compute the rolling 30d window once.
+      // Settle pending → available + refresh balances on each /me hit so
+      // home/payment screens see accurate wallet state.
+      await recomputeWallet(user.driverId);
+      driver = await db
+        .collection(Collections.drivers)
+        .findOne({ _id: new ObjectId(user.driverId) });
+
       const month = await computePeriodStats(user.driverId, "month");
       driverStats = {
-        monthlyEarnings: month.monthlyEarnings,
+        monthlyEarningsCents: month.monthlyEarningsCents,
         growthPercent: month.growthPercent,
         activeCampaigns: month.activeCampaigns,
       };

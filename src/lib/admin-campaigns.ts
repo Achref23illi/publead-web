@@ -12,7 +12,7 @@ type CampaignDTO = {
   startDate: string;
   endDate: string;
   durationDays: number;
-  reward: number;
+  rewardCents: number;
   status: "draft" | "upcoming" | "active" | "completed";
   progress: number;
   kmDone: number;
@@ -90,7 +90,7 @@ export function dtoToWebCampaign(dto: CampaignDTO): Campaign {
     period: periodOf(dto.startDate, dto.endDate),
     drivers: [dto.driversAssigned, dto.driversNeeded],
     km: [dto.kmDone, dto.kmTotal],
-    rev: `${dto.reward * dto.driversAssigned} €`,
+    rev: `${Math.round((dto.rewardCents * dto.driversAssigned) / 100)} €`,
     status,
     progress: Math.round(dto.progress * 100),
   };
