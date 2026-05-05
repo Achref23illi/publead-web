@@ -34,7 +34,11 @@ export type DriverDoc = {
   bankAccount?: BankAccount;
   // True only when every required document type has been admin-approved.
   documentsApproved: boolean;
+  // Last time the driver changed their city (used to enforce a cooldown).
+  cityChangedAt?: Date;
 };
+
+export const CITY_CHANGE_COOLDOWN_HOURS = 48;
 
 // --- Vehicles ---
 

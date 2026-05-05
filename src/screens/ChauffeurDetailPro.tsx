@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/Icon";
 import { VehiclesPanel } from "./VehiclesPanel";
+import { DriverEditModal } from "./DriverEditModal";
 
 type StatsPeriod = "week" | "month" | "3mo" | "year";
 
@@ -56,6 +57,8 @@ export function ChauffeurDetailPro({ driverId }: { driverId: string }) {
   const [data, setData] = useState<DriverStatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +83,7 @@ export function ChauffeurDetailPro({ driverId }: { driverId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [driverId, period]);
+  }, [driverId, period, reloadKey]);
 
   if (loading && !data) {
     return (
@@ -129,12 +132,21 @@ export function ChauffeurDetailPro({ driverId }: { driverId: string }) {
             {driver.city} · {driver.status}
           </p>
         </div>
-        <Link
-          href={`/campagnes?driverId=${driver.id}`}
-          className="btn btn-primary"
-        >
-          <Icon name="list" size={16} /> Voir ses campagnes
-        </Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={() => setEditOpen(true)}
+          >
+            <Icon name="settings" size={16} /> Modifier
+          </button>
+          <Link
+            href={`/campagnes?driverId=${driver.id}`}
+            className="btn btn-primary"
+          >
+            <Icon name="list" size={16} /> Voir ses campagnes
+          </Link>
+        </div>
       </div>
 
       {/* Period selector */}
@@ -300,6 +312,23 @@ export function ChauffeurDetailPro({ driverId }: { driverId: string }) {
       <div style={{ marginTop: 24 }}>
         <VehiclesPanel driverId={driver.id} />
       </div>
+
+      {editOpen && (
+        <DriverEditModal
+          driverId={driver.id}
+          initial={{
+            firstName: driver.firstName,
+            lastName: driver.lastName,
+            city: driver.city,
+            status: driver.status,
+          }}
+          onClose={() => setEditOpen(false)}
+          onSaved={() => {
+            setEditOpen(false);
+            setReloadKey((k) => k + 1);
+          }}
+        />
+      )}
     </div>
   );
 }
