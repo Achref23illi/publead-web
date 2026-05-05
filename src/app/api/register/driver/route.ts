@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { Collections, type DriverDoc } from "@/lib/schemas";
+import {
+  Collections,
+  type DriverDoc,
+  type VehicleDoc,
+  type VehicleType,
+} from "@/lib/schemas";
 
 type Body = {
   firstName: string;
@@ -10,11 +15,18 @@ type Body = {
   phone: string;
   password: string;
   city: string;
-  vehicleModel: string;
+  vehicleModel: string; // "make model" combined input from mobile form
   vehicleYear: string;
   licensePlate: string;
   vehicleType: string;
 };
+
+const VALID_VEHICLE_TYPES: VehicleType[] = [
+  "Berline",
+  "SUV",
+  "Utilitaire",
+  "Autre",
+];
 
 function validate(b: Partial<Body>): string | null {
   if (!b.firstName?.trim()) return "firstName required";
@@ -67,10 +79,6 @@ export async function POST(req: NextRequest) {
     lastName: body.lastName!.trim(),
     phone: body.phone!.trim(),
     city: body.city!.trim(),
-    vehicleModel: body.vehicleModel!.trim(),
-    vehicleYear: body.vehicleYear!.trim(),
-    licensePlate: body.licensePlate!.trim().toUpperCase(),
-    vehicleType: body.vehicleType!.trim(),
     status: "pending",
     joinedAt: new Date(),
     campaignsDone: 0,
@@ -83,18 +91,48 @@ export async function POST(req: NextRequest) {
     documentsApproved: false,
   };
   const ins = await db.collection(Collections.drivers).insertOne(driverDoc);
+  const driverId = ins.insertedId.toString();
 
   await db
     .collection("user")
     .updateOne(
       { _id: userId } as never,
-      { $set: { driverId: ins.insertedId.toString() } },
+      { $set: { driverId } },
     );
+
+  // Initial vehicle from registration form. Best-effort split of vehicleModel
+  // ("Peugeot 308") into make/model on first whitespace; fallback uses the
+  // entire string as model with "Inconnu" make so admin can fix later.
+  const trimmedModel = body.vehicleModel!.trim();
+  const firstSpace = trimmedModel.indexOf(" ");
+  const make = firstSpace > 0 ? trimmedModel.slice(0, firstSpace) : "Inconnu";
+  const model =
+    firstSpace > 0 ? trimmedModel.slice(firstSpace + 1) : trimmedModel;
+  const type: VehicleType = VALID_VEHICLE_TYPES.includes(
+    body.vehicleType!.trim() as VehicleType,
+  )
+    ? (body.vehicleType!.trim() as VehicleType)
+    : "Berline";
+
+  const now = new Date();
+  const vehicleDoc: VehicleDoc = {
+    driverId,
+    make,
+    model,
+    year: body.vehicleYear!.trim(),
+    licensePlate: body.licensePlate!.trim().toUpperCase(),
+    type,
+    isActive: true,
+    photos: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  await db.collection(Collections.vehicles).insertOne(vehicleDoc);
 
   return NextResponse.json({
     ok: true,
     userId,
-    driverId: ins.insertedId.toString(),
+    driverId,
     needsEmailVerification: true,
   });
 }

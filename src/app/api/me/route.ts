@@ -6,6 +6,7 @@ import { ObjectId } from "mongodb";
 import { computePeriodStats } from "@/lib/driver-stats";
 import { recomputeWallet } from "@/lib/wallet";
 import { buildDocumentSummary } from "@/lib/documents";
+import { listVehiclesForDriver, serializeVehicle } from "@/lib/vehicles";
 
 export async function GET(req: NextRequest) {
   const session = await auth.api.getSession({ headers: req.headers });
@@ -27,6 +28,7 @@ export async function GET(req: NextRequest) {
   let partner = null;
   let driverStats = null;
   let documentsSummary = null;
+  let vehicles = null;
 
   if (user.driverId) {
     driver = await db
@@ -48,6 +50,9 @@ export async function GET(req: NextRequest) {
       };
 
       documentsSummary = await buildDocumentSummary(user.driverId);
+
+      const vehicleDocs = await listVehiclesForDriver(user.driverId);
+      vehicles = vehicleDocs.map(serializeVehicle);
     }
   }
   if (user.companyId) {
@@ -74,6 +79,7 @@ export async function GET(req: NextRequest) {
     driver,
     driverStats,
     documents: documentsSummary,
+    vehicles,
     company,
     partner,
   });

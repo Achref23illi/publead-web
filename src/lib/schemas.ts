@@ -21,10 +21,6 @@ export type DriverDoc = {
   lastName: string;
   phone: string;
   city: string;
-  vehicleModel: string;
-  vehicleYear: string;
-  licensePlate: string;
-  vehicleType: string;
   status: ValidationStatus;
   joinedAt: Date;
   campaignsDone: number;
@@ -39,6 +35,37 @@ export type DriverDoc = {
   // True only when every required document type has been admin-approved.
   documentsApproved: boolean;
 };
+
+// --- Vehicles ---
+
+export type VehicleType = "Berline" | "SUV" | "Utilitaire" | "Autre";
+
+export type InspectionInfo = {
+  // Date the technical inspection ("contrôle technique") expires.
+  expiresAt?: Date;
+  // Optional Cloudinary file ref for the inspection certificate.
+  fileUrl?: string;
+  filePublicId?: string;
+};
+
+export type VehicleDoc = {
+  _id?: ObjectId;
+  driverId: string;
+  make: string; // e.g. "Audi"
+  model: string; // e.g. "Q5"
+  year: string; // stored as string for flexibility ("2022")
+  licensePlate: string; // normalized uppercase
+  type: VehicleType;
+  isActive: boolean;
+  inspection?: InspectionInfo;
+  // Showcase gallery (separate from D4 KYC vehicle_photos).
+  photos: FileMeta[];
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export const VEHICLE_MAX_PER_DRIVER = 3;
+export const VEHICLE_PHOTOS_MAX = 10;
 
 export type CompanyDoc = {
   _id?: ObjectId;
@@ -272,4 +299,5 @@ export const Collections = {
   withdrawals: "withdrawals",
   appConfig: "app_config",
   documents: "documents",
+  vehicles: "vehicles",
 } as const;

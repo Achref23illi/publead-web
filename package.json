@@ -16,7 +16,8 @@
     "backfill:driver-stats": "tsx --env-file=.env.local scripts/backfill-driver-stats.ts",
     "seed:app-config": "tsx --env-file=.env.local scripts/seed-app-config.ts",
     "backfill:ledger": "tsx --env-file=.env.local scripts/backfill-ledger.ts",
-    "migrate:documents-flag": "tsx --env-file=.env.local scripts/migrate-documents-flag.ts"
+    "migrate:documents-flag": "tsx --env-file=.env.local scripts/migrate-documents-flag.ts",
+    "migrate:vehicles": "tsx --env-file=.env.local scripts/migrate-vehicles.ts"
   },
   "dependencies": {
     "@better-auth/expo": "^1.6.9",

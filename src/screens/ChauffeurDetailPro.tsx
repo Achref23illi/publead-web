@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/Icon";
+import { VehiclesPanel } from "./VehiclesPanel";
 
 type StatsPeriod = "week" | "month" | "3mo" | "year";
 
@@ -295,6 +296,10 @@ export function ChauffeurDetailPro({ driverId }: { driverId: string }) {
           </div>
         </div>
       )}
+
+      <div style={{ marginTop: 24 }}>
+        <VehiclesPanel driverId={driver.id} />
+      </div>
     </div>
   );
 }

@@ -97,6 +97,20 @@ async function wipeUser(email: string) {
   const userId = existing._id;
   const userIdStr = userId.toString();
 
+  // Clear vehicles + documents owned by any driver record for this user.
+  const driverDoc = await db
+    .collection(Collections.drivers)
+    .findOne({ userId: userIdStr });
+  if (driverDoc) {
+    const driverIdStr = driverDoc._id.toString();
+    await db
+      .collection(Collections.vehicles)
+      .deleteMany({ driverId: driverIdStr });
+    await db
+      .collection(Collections.documents)
+      .deleteMany({ driverId: driverIdStr });
+  }
+
   await db.collection("session").deleteMany({ userId: userIdStr });
   await db.collection("account").deleteMany({ userId: userIdStr });
   await db.collection(Collections.drivers).deleteMany({ userId: userIdStr });
@@ -140,18 +154,15 @@ async function createUser(u: DemoUser): Promise<string> {
 
 async function createDriver(userId: string, u: DemoUser) {
   if (!u.driver) return;
+  const now = new Date();
   const ins = await db.collection(Collections.drivers).insertOne({
     userId,
     firstName: u.driver.firstName,
     lastName: u.driver.lastName,
     phone: u.phone ?? "",
     city: u.driver.city,
-    vehicleModel: u.driver.vehicleModel,
-    vehicleYear: u.driver.vehicleYear,
-    licensePlate: u.driver.licensePlate,
-    vehicleType: u.driver.vehicleType,
     status: "validated",
-    joinedAt: new Date(),
+    joinedAt: now,
     campaignsDone: 12,
     rating: 4.9,
     totalKm: 18500,
@@ -161,13 +172,35 @@ async function createDriver(userId: string, u: DemoUser) {
     withdrawnTotalCents: 0,
     documentsApproved: true,
   });
+  const driverId = ins.insertedId.toString();
+
+  // Wipe any existing vehicles for this driver (idempotent reseed),
+  // then insert one active vehicle from the demo data.
+  await db.collection(Collections.vehicles).deleteMany({ driverId });
+  const trimmed = u.driver.vehicleModel.trim();
+  const firstSpace = trimmed.indexOf(" ");
+  const make = firstSpace > 0 ? trimmed.slice(0, firstSpace) : "Inconnu";
+  const model = firstSpace > 0 ? trimmed.slice(firstSpace + 1) : trimmed;
+  await db.collection(Collections.vehicles).insertOne({
+    driverId,
+    make,
+    model,
+    year: u.driver.vehicleYear,
+    licensePlate: u.driver.licensePlate,
+    type: u.driver.vehicleType,
+    isActive: true,
+    photos: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+
   await db
     .collection("user")
     .updateOne(
       { email: u.email },
-      { $set: { driverId: ins.insertedId.toString() } },
+      { $set: { driverId } },
     );
-  console.log(`[seed] driver linked: ${u.email}`);
+  console.log(`[seed] driver + vehicle linked: ${u.email}`);
 }
 
 async function createCompany(userId: string, u: DemoUser) {
