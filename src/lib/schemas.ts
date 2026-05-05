@@ -66,8 +66,59 @@ export type PartnerDoc = {
   createdAt: Date;
 };
 
+export type CampaignStatus =
+  | "draft"
+  | "upcoming"
+  | "active"
+  | "completed";
+
+export type TrackingMode = "gps" | "manual";
+
+export type CampaignDoc = {
+  _id?: ObjectId;
+  companyId: string;
+  brand: string;
+  domain: string;
+  title: string;
+  description: string;
+  city: string;
+  zones: string[];
+  startDate: Date;
+  endDate: Date;
+  durationDays: number;
+  reward: number;
+  status: CampaignStatus;
+  progress: number;
+  kmDone: number;
+  kmTotal: number;
+  driversNeeded: number;
+  driversAssigned: number;
+  assignedDriverIds: string[];
+  trackingMode: TrackingMode;
+  heroImageUrl?: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type CampaignEventType =
+  | "accept"
+  | "cancel"
+  | "complete"
+  | "status_change";
+
+export type CampaignEventDoc = {
+  _id?: ObjectId;
+  campaignId: string;
+  type: CampaignEventType;
+  driverId?: string;
+  at: Date;
+  meta?: Record<string, unknown>;
+};
+
 export const Collections = {
   drivers: "drivers",
   companies: "companies",
   partners: "partners",
+  campaigns: "campaigns",
+  campaignEvents: "campaign_events",
 } as const;

@@ -9,7 +9,10 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "seed:users": "tsx --env-file=.env.local scripts/seed-users.ts"
+    "seed:users": "tsx --env-file=.env.local scripts/seed-users.ts",
+    "seed:companies": "tsx --env-file=.env.local scripts/seed-companies.ts",
+    "seed:campaigns": "tsx --env-file=.env.local scripts/seed-campaigns.ts",
+    "seed:all": "npm run seed:users && npm run seed:companies && npm run seed:campaigns"
   },
   "dependencies": {
     "@better-auth/expo": "^1.6.9",

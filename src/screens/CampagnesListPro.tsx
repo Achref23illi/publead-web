@@ -3,35 +3,73 @@
 /**
  * CampagnesListPro — pro UI list of all campaigns.
  * 1:1 port of campaigns.jsx's <CampagnesList>.
+ *
+ * Live DB mode activates when ?driverId= is present in URL — list is fetched
+ * from /api/admin/campaigns filtered to that driver. Otherwise the legacy
+ * static CAMPAIGNS mock is used (other admin areas still depend on it).
  */
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Icon } from "@/components/Icon";
-import { CAMPAIGNS } from "@/lib/data";
+import { CAMPAIGNS, type Campaign } from "@/lib/data";
+import { fetchAdminCampaigns } from "@/lib/admin-campaigns";
 import { CampaignsTable } from "@/screens/DashboardPro";
 
 type TypeFilter = "tous" | "flocage" | "borne";
 
 export function CampagnesListPro() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const driverId = searchParams.get("driverId");
   const [type, setType] = useState<TypeFilter>("tous");
+
+  const [liveRows, setLiveRows] = useState<Campaign[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!driverId) {
+      setLiveRows(null);
+      return;
+    }
+    setLoading(true);
+    fetchAdminCampaigns({ driverId })
+      .then(setLiveRows)
+      .catch(() => setLiveRows([]))
+      .finally(() => setLoading(false));
+  }, [driverId]);
+
+  const baseRows = liveRows ?? CAMPAIGNS;
   const rows =
     type === "tous"
-      ? CAMPAIGNS
-      : CAMPAIGNS.filter((c) => c.type.toLowerCase() === type);
+      ? baseRows
+      : baseRows.filter((c) => c.type.toLowerCase() === type);
 
   return (
     <div className="page">
       <div className="page-header">
         <div>
           <h1>Campagnes</h1>
-          <p className="subtitle">Toutes les campagnes Flocage et Leader Borne.</p>
+          <p className="subtitle">
+            {driverId
+              ? `Campagnes du chauffeur ${driverId}${loading ? " · chargement…" : ""}`
+              : "Toutes les campagnes Flocage et Leader Borne."}
+          </p>
         </div>
-        <Link href="/campagnes/new" className="btn btn-primary">
-          <Icon name="plus" size={18} /> Nouvelle campagne
-        </Link>
+        {driverId ? (
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={() => router.push("/campagnes")}
+          >
+            <Icon name="x" size={16} /> Retirer le filtre
+          </button>
+        ) : (
+          <Link href="/campagnes/new" className="btn btn-primary">
+            <Icon name="plus" size={18} /> Nouvelle campagne
+          </Link>
+        )}
       </div>
 
       <div className="grid grid-12 mb-6" style={{ gap: 16 }}>
