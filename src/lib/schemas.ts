@@ -36,7 +36,8 @@ export type DriverDoc = {
   pendingBalanceCents: number;
   withdrawnTotalCents: number;
   bankAccount?: BankAccount;
-  documentsUploaded: boolean;
+  // True only when every required document type has been admin-approved.
+  documentsApproved: boolean;
 };
 
 export type CompanyDoc = {
@@ -185,6 +186,82 @@ export type AppConfigDoc = {
   updatedAt: Date;
 };
 
+// --- Documents (KYC) ---
+
+export type DocumentType =
+  | "license"
+  | "registration"
+  | "insurance"
+  | "rib"
+  | "vehicle_photos";
+
+export type DocumentStatus = "missing" | "pending" | "approved" | "rejected";
+
+export type FileMeta = {
+  publicId: string; // Cloudinary public_id (used for delete)
+  url: string; // secure_url
+  resourceType: "image" | "raw" | "video";
+  format?: string;
+  bytes: number;
+  width?: number;
+  height?: number;
+  uploadedAt: Date;
+};
+
+export type DocumentDoc = {
+  _id?: ObjectId;
+  driverId: string;
+  type: DocumentType;
+  status: DocumentStatus;
+  files: FileMeta[];
+  // Approval/reject metadata (last action only — re-upload clears reject).
+  reviewedBy?: string;
+  reviewedAt?: Date;
+  rejectReason?: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+// Required count per type — drives UI hints and admin completeness checks.
+export const DOC_TYPE_META: Record<
+  DocumentType,
+  { label: string; requiredCount: number; description: string }
+> = {
+  license: {
+    label: "Permis de conduire",
+    requiredCount: 2, // recto + verso
+    description: "Recto et verso de votre permis.",
+  },
+  registration: {
+    label: "Carte grise",
+    requiredCount: 2,
+    description: "Recto et verso de la carte grise du véhicule.",
+  },
+  insurance: {
+    label: "Attestation d'assurance",
+    requiredCount: 1,
+    description: "Attestation à jour, période en cours visible.",
+  },
+  rib: {
+    label: "RIB bancaire",
+    requiredCount: 1,
+    description: "Relevé d'identité bancaire au nom du chauffeur.",
+  },
+  vehicle_photos: {
+    label: "Photos du véhicule",
+    requiredCount: 4,
+    description: "Avant, arrière, côté gauche, côté droit.",
+  },
+};
+
+export const REQUIRED_DOC_TYPES: DocumentType[] = [
+  "license",
+  "registration",
+  "insurance",
+  "rib",
+  "vehicle_photos",
+];
+
 export const Collections = {
   drivers: "drivers",
   companies: "companies",
@@ -194,4 +271,5 @@ export const Collections = {
   transactions: "transactions",
   withdrawals: "withdrawals",
   appConfig: "app_config",
+  documents: "documents",
 } as const;

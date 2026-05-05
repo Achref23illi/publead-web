@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     availableBalanceCents: 0,
     pendingBalanceCents: 0,
     withdrawnTotalCents: 0,
-    documentsUploaded: false,
+    documentsApproved: false,
   };
   const ins = await db.collection(Collections.drivers).insertOne(driverDoc);
 

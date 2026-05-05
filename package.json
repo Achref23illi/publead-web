@@ -15,12 +15,14 @@
     "seed:all": "npm run seed:users && npm run seed:companies && npm run seed:campaigns",
     "backfill:driver-stats": "tsx --env-file=.env.local scripts/backfill-driver-stats.ts",
     "seed:app-config": "tsx --env-file=.env.local scripts/seed-app-config.ts",
-    "backfill:ledger": "tsx --env-file=.env.local scripts/backfill-ledger.ts"
+    "backfill:ledger": "tsx --env-file=.env.local scripts/backfill-ledger.ts",
+    "migrate:documents-flag": "tsx --env-file=.env.local scripts/migrate-documents-flag.ts"
   },
   "dependencies": {
     "@better-auth/expo": "^1.6.9",
     "@types/pdfkit": "^0.17.6",
     "better-auth": "^1.6.9",
+    "cloudinary": "^2.10.0",
     "mongodb": "^7.2.0",
     "next": "^15.5.15",
     "nodemailer": "^8.0.7",

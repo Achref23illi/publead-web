@@ -5,6 +5,7 @@ import { Collections } from "@/lib/schemas";
 import { ObjectId } from "mongodb";
 import { computePeriodStats } from "@/lib/driver-stats";
 import { recomputeWallet } from "@/lib/wallet";
+import { buildDocumentSummary } from "@/lib/documents";
 
 export async function GET(req: NextRequest) {
   const session = await auth.api.getSession({ headers: req.headers });
@@ -25,6 +26,7 @@ export async function GET(req: NextRequest) {
   let company = null;
   let partner = null;
   let driverStats = null;
+  let documentsSummary = null;
 
   if (user.driverId) {
     driver = await db
@@ -44,6 +46,8 @@ export async function GET(req: NextRequest) {
         growthPercent: month.growthPercent,
         activeCampaigns: month.activeCampaigns,
       };
+
+      documentsSummary = await buildDocumentSummary(user.driverId);
     }
   }
   if (user.companyId) {
@@ -69,6 +73,7 @@ export async function GET(req: NextRequest) {
     },
     driver,
     driverStats,
+    documents: documentsSummary,
     company,
     partner,
   });

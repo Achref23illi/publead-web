@@ -159,7 +159,7 @@ async function createDriver(userId: string, u: DemoUser) {
     availableBalanceCents: 0,
     pendingBalanceCents: 0,
     withdrawnTotalCents: 0,
-    documentsUploaded: true,
+    documentsApproved: true,
   });
   await db
     .collection("user")
