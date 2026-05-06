@@ -7,7 +7,7 @@ import {
 } from "@/lib/schemas";
 import { requireAdmin } from "@/lib/session";
 import { reconcileMany } from "@/lib/campaign-lifecycle";
-import { serializeCampaign } from "@/lib/campaign-serializer";
+import { loadBrandMap, serializeCampaign } from "@/lib/campaign-serializer";
 
 const VALID_STATUSES: CampaignStatus[] = [
   "draft",
@@ -38,7 +38,10 @@ export async function GET(req: NextRequest) {
 
   const reconciled = reconcileMany(docs);
 
+  const brandMap = await loadBrandMap(reconciled);
   return NextResponse.json({
-    campaigns: reconciled.map(serializeCampaign),
+    campaigns: reconciled.map((c) =>
+      serializeCampaign(c, brandMap.get(c.companyId)),
+    ),
   });
 }

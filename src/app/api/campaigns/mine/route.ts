@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { Collections, type CampaignDoc } from "@/lib/schemas";
 import { requireDriver } from "@/lib/session";
 import { reconcileMany } from "@/lib/campaign-lifecycle";
-import { serializeCampaign } from "@/lib/campaign-serializer";
+import { loadBrandMap, serializeCampaign } from "@/lib/campaign-serializer";
 
 export async function GET(req: NextRequest) {
   const auth = await requireDriver(req.headers);
@@ -23,9 +23,14 @@ export async function GET(req: NextRequest) {
   const upcoming = reconciled.filter((c) => c.status === "upcoming");
   const completed = reconciled.filter((c) => c.status === "completed");
 
+  const brandMap = await loadBrandMap(reconciled);
   return NextResponse.json({
-    active: active.map(serializeCampaign),
-    upcoming: upcoming.map(serializeCampaign),
-    completed: completed.map(serializeCampaign),
+    active: active.map((c) => serializeCampaign(c, brandMap.get(c.companyId))),
+    upcoming: upcoming.map((c) =>
+      serializeCampaign(c, brandMap.get(c.companyId)),
+    ),
+    completed: completed.map((c) =>
+      serializeCampaign(c, brandMap.get(c.companyId)),
+    ),
   });
 }

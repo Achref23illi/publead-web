@@ -4,7 +4,7 @@ import { signUpload } from "@/lib/cloudinary";
 import { REQUIRED_DOC_TYPES, type DocumentType } from "@/lib/schemas";
 
 type Body = {
-  scope?: "document" | "asset" | "visual";
+  scope?: "document" | "asset" | "visual" | "company_logo";
   documentType?: DocumentType;
 };
 
@@ -36,6 +36,17 @@ export async function POST(req: NextRequest) {
       );
     }
     folder = `publeader/documents/${auth.user.driverId}/${body.documentType}`;
+  } else if (scope === "company_logo") {
+    if (auth.user.role !== "advertiser") {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+    if (!auth.user.companyId) {
+      return NextResponse.json(
+        { error: "company profile missing" },
+        { status: 409 },
+      );
+    }
+    folder = `publeader/companies/${auth.user.companyId}/logo`;
   }
 
   try {

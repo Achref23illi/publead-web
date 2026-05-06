@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { Collections, type CampaignDoc } from "@/lib/schemas";
 import { requireDriver } from "@/lib/session";
 import { expectedStatus, syncStatusToDb } from "@/lib/campaign-lifecycle";
-import { serializeCampaign } from "@/lib/campaign-serializer";
+import { serializeCampaignWithBrand } from "@/lib/campaign-serializer";
 
 export async function POST(
   req: NextRequest,
@@ -121,5 +121,7 @@ export async function POST(
     updated.status = next;
   }
 
-  return NextResponse.json({ campaign: serializeCampaign(updated) });
+  return NextResponse.json({
+    campaign: await serializeCampaignWithBrand(updated),
+  });
 }

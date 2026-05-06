@@ -1,4 +1,6 @@
-import type { CampaignDoc } from "./schemas";
+import { ObjectId } from "mongodb";
+import { db } from "./db";
+import { Collections, type CampaignDoc, type CompanyDoc } from "./schemas";
 
 export type CampaignDTO = {
   id: string;
@@ -22,9 +24,15 @@ export type CampaignDTO = {
   assignedDriverIds: string[];
   trackingMode: CampaignDoc["trackingMode"];
   heroImageUrl?: string;
+  // Brand metadata joined from CompanyDoc (best-effort).
+  brandColor?: string;
+  brandLogoUrl?: string;
 };
 
-export function serializeCampaign(c: CampaignDoc): CampaignDTO {
+export function serializeCampaign(
+  c: CampaignDoc,
+  brand?: { brandColor?: string; brandLogoUrl?: string },
+): CampaignDTO {
   return {
     id: c._id!.toString(),
     companyId: c.companyId,
@@ -47,5 +55,45 @@ export function serializeCampaign(c: CampaignDoc): CampaignDTO {
     assignedDriverIds: c.assignedDriverIds,
     trackingMode: c.trackingMode,
     heroImageUrl: c.heroImageUrl,
+    brandColor: brand?.brandColor,
+    brandLogoUrl: brand?.brandLogoUrl,
   };
+}
+
+export type CampaignBrandMap = Map<
+  string,
+  { brandColor?: string; brandLogoUrl?: string }
+>;
+
+/**
+ * Loads brand metadata (color, logoUrl) for a list of campaigns in one query.
+ * Returns a Map keyed by companyId for use with serializeCampaign.
+ */
+export async function loadBrandMap(
+  campaigns: CampaignDoc[],
+): Promise<CampaignBrandMap> {
+  const ids = Array.from(new Set(campaigns.map((c) => c.companyId)));
+  const map: CampaignBrandMap = new Map();
+  if (ids.length === 0) return map;
+
+  const docs = (await db
+    .collection(Collections.companies)
+    .find({ _id: { $in: ids.map((id) => new ObjectId(id)) } })
+    .project({ brandColor: 1, logo: 1, logoUrl: 1 })
+    .toArray()) as Pick<CompanyDoc, "_id" | "brandColor" | "logo" | "logoUrl">[];
+
+  for (const d of docs) {
+    map.set(d._id!.toString(), {
+      brandColor: d.brandColor,
+      brandLogoUrl: d.logo?.url ?? d.logoUrl,
+    });
+  }
+  return map;
+}
+
+export async function serializeCampaignWithBrand(
+  c: CampaignDoc,
+): Promise<CampaignDTO> {
+  const map = await loadBrandMap([c]);
+  return serializeCampaign(c, map.get(c.companyId));
 }

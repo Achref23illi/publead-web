@@ -89,10 +89,31 @@ export type CompanyDoc = {
   budgetTotal: number;
   employees?: string;
   campaignsCount: number;
-  brandColor?: string;
+  // Brand identity
+  brandColor?: string; // hex like #FF5733
+  logo?: {
+    publicId: string; // Cloudinary public_id (used for delete)
+    url: string;
+    bytes: number;
+  };
+  // Legacy plain string still supported as read-only fallback for old data.
   logoUrl?: string;
+  // Legal info (French invoicing fields)
+  legalName?: string;
+  siret?: string;
+  vatNumber?: string;
+  legalForm?: "SARL" | "SAS" | "SA" | "EURL" | "Auto-entrepreneur" | "Autre";
   createdAt: Date;
 };
+
+export const COMPANY_LEGAL_FORMS = [
+  "SARL",
+  "SAS",
+  "SA",
+  "EURL",
+  "Auto-entrepreneur",
+  "Autre",
+] as const;
 
 export type PartnerDoc = {
   _id?: ObjectId;

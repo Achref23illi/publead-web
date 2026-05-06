@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { Collections, type CampaignDoc } from "@/lib/schemas";
 import { requireDriver } from "@/lib/session";
 import { reconcileMany } from "@/lib/campaign-lifecycle";
-import { serializeCampaign } from "@/lib/campaign-serializer";
+import { loadBrandMap, serializeCampaign } from "@/lib/campaign-serializer";
 
 export async function GET(req: NextRequest) {
   const auth = await requireDriver(req.headers);
@@ -37,7 +37,10 @@ export async function GET(req: NextRequest) {
     return true;
   });
 
+  const brandMap = await loadBrandMap(filtered);
   return NextResponse.json({
-    campaigns: filtered.map(serializeCampaign),
+    campaigns: filtered.map((c) =>
+      serializeCampaign(c, brandMap.get(c.companyId)),
+    ),
   });
 }

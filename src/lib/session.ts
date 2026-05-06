@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "./auth";
 import { db } from "./db";
-import { Collections, type DriverDoc } from "./schemas";
+import { Collections, type CompanyDoc, type DriverDoc } from "./schemas";
 import { ObjectId } from "mongodb";
 
 export type SessionUser = {
@@ -67,6 +67,44 @@ export async function requireDriver(
     };
   }
   return { ok: true, user: s.user, driver };
+}
+
+export async function requireAdvertiser(
+  headers: Headers,
+): Promise<
+  | { ok: true; user: SessionUser; company: CompanyDoc }
+  | { ok: false; response: NextResponse }
+> {
+  const s = await requireSession(headers);
+  if (!s.ok) return s;
+  if (s.user.role !== "advertiser") {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "forbidden" }, { status: 403 }),
+    };
+  }
+  if (!s.user.companyId) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "company profile missing" },
+        { status: 409 },
+      ),
+    };
+  }
+  const company = (await db
+    .collection(Collections.companies)
+    .findOne({ _id: new ObjectId(s.user.companyId) })) as CompanyDoc | null;
+  if (!company) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "company not found" },
+        { status: 404 },
+      ),
+    };
+  }
+  return { ok: true, user: s.user, company };
 }
 
 export async function requireAdmin(

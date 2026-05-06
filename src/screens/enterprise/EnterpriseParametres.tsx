@@ -1,29 +1,231 @@
 "use client";
 
 /**
- * EnterpriseParametres — advertiser account settings.
- * Tabs: Profil · Identité de marque · Notifications · API.
+ * EnterpriseParametres — advertiser account settings, wired to /api/me/company.
+ * Tabs: Profil · Identité de marque · Légal · Notifications.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/Icon";
 
-type Tab = "profile" | "brand" | "notifications" | "api";
+type Tab = "profile" | "brand" | "legal";
 
-const TABS: { id: Tab; label: string; icon: "user" | "image" | "bell" | "code" }[] = [
-  { id: "profile", label: "Profil entreprise", icon: "user" },
-  { id: "brand", label: "Identité de marque", icon: "image" },
-  { id: "notifications", label: "Notifications", icon: "bell" },
-  { id: "api", label: "API & webhooks", icon: "code" },
+const TABS: { id: Tab; label: string; icon: "user" | "image" | "file-text" }[] =
+  [
+    { id: "profile", label: "Profil entreprise", icon: "user" },
+    { id: "brand", label: "Identité de marque", icon: "image" },
+    { id: "legal", label: "Informations légales", icon: "file-text" },
+  ];
+
+const LEGAL_FORMS = [
+  "SARL",
+  "SAS",
+  "SA",
+  "EURL",
+  "Auto-entrepreneur",
+  "Autre",
+] as const;
+const SECTORS = [
+  "Mode & Sport",
+  "Alimentation & Boissons",
+  "Automobile",
+  "Technologie",
+  "Divertissement",
+  "Restauration",
+  "Autre",
 ];
+
+type CompanyDTO = {
+  id: string;
+  companyName: string;
+  contactName: string;
+  phone: string;
+  domain: string;
+  sector: string;
+  city: string;
+  website?: string;
+  description?: string;
+  founded?: string;
+  headquarters?: string;
+  employees?: string;
+  brandColor?: string;
+  logo?: { publicId: string; url: string; bytes: number };
+  logoUrl?: string;
+  legalName?: string;
+  siret?: string;
+  vatNumber?: string;
+  legalForm?: (typeof LEGAL_FORMS)[number];
+  status: "pending" | "validated" | "rejected";
+};
+
+type SignedUploadParams = {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  folder: string;
+};
+
+async function uploadCompanyLogo(file: File): Promise<{
+  publicId: string;
+  url: string;
+  bytes: number;
+}> {
+  // 1. Sign
+  const signRes = await fetch("/api/uploads/sign", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scope: "company_logo" }),
+  });
+  if (!signRes.ok) throw new Error(`sign failed (${signRes.status})`);
+  const sig = (await signRes.json()) as SignedUploadParams;
+
+  // 2. Upload to Cloudinary
+  const form = new FormData();
+  form.append("file", file);
+  form.append("api_key", sig.apiKey);
+  form.append("timestamp", String(sig.timestamp));
+  form.append("signature", sig.signature);
+  form.append("folder", sig.folder);
+
+  const upRes = await fetch(
+    `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,
+    { method: "POST", body: form },
+  );
+  if (!upRes.ok) {
+    throw new Error(`cloudinary upload failed (${upRes.status})`);
+  }
+  const body = (await upRes.json()) as {
+    public_id: string;
+    secure_url: string;
+    bytes: number;
+  };
+  return {
+    publicId: body.public_id,
+    url: body.secure_url,
+    bytes: body.bytes,
+  };
+}
 
 export function EnterpriseParametres() {
   const [tab, setTab] = useState<Tab>("profile");
-  const [notifEmail, setNotifEmail] = useState(true);
-  const [notifBilling, setNotifBilling] = useState(true);
-  const [notifReports, setNotifReports] = useState(false);
-  const [notifMarketing, setNotifMarketing] = useState(false);
-  const [apiKeyVisible, setApiKeyVisible] = useState(false);
+  const [company, setCompany] = useState<CompanyDTO | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Partial<CompanyDTO>>({});
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/me/company", { credentials: "include" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = (await res.json()) as { company: CompanyDTO };
+      setCompany(body.company);
+      setDraft({});
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const setField = <K extends keyof CompanyDTO>(key: K, value: CompanyDTO[K]) => {
+    setDraft((d) => ({ ...d, [key]: value }));
+  };
+
+  const value = <K extends keyof CompanyDTO>(key: K): CompanyDTO[K] | undefined =>
+    (draft[key] as CompanyDTO[K] | undefined) ?? company?.[key];
+
+  const isDirty = Object.keys(draft).length > 0;
+
+  const save = async () => {
+    if (!isDirty) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/me/company", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draft),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      const body = (await res.json()) as { company: CompanyDTO };
+      setCompany(body.company);
+      setDraft({});
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleLogoFile = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Logo too large (max 5MB)");
+      return;
+    }
+    setLogoUploading(true);
+    setError(null);
+    try {
+      const uploaded = await uploadCompanyLogo(file);
+      const res = await fetch("/api/me/company/logo", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(uploaded),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const removeLogo = async () => {
+    setLogoUploading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/me/company/logo", {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  if (loading && !company) {
+    return (
+      <div className="glass-page">
+        <div className="glass-pagehead">
+          <h1 style={{ fontSize: 28 }}>Paramètres</h1>
+        </div>
+        <p style={{ color: "var(--gray-500)" }}>Chargement…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="glass-page">
@@ -33,409 +235,398 @@ export function EnterpriseParametres() {
             Paramètres
           </h1>
           <p style={{ margin: "4px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-            Votre compte Nova Cosmétique
+            {company?.companyName ?? "Votre compte"}
           </p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button type="button" className="glass-btn ghost">Annuler</button>
-          <button type="button" className="glass-btn">
-            <Icon name="check" size={14} /> Enregistrer
+          <button
+            type="button"
+            className="glass-btn ghost"
+            onClick={() => setDraft({})}
+            disabled={!isDirty || saving}
+          >
+            Annuler
+          </button>
+          <button
+            type="button"
+            className="glass-btn"
+            onClick={save}
+            disabled={!isDirty || saving}
+          >
+            <Icon name="check" size={14} /> {saving ? "Envoi…" : "Enregistrer"}
           </button>
         </div>
       </div>
 
+      {error && (
+        <div
+          style={{
+            padding: 12,
+            background: "#FEE2E2",
+            color: "#991B1B",
+            borderRadius: 8,
+            marginBottom: 16,
+            fontSize: 13,
+          }}
+        >
+          {error}
+        </div>
+      )}
+
       <div className="glass-split">
         <aside className="glass-sidenav">
           <div className="glass-sidenav-head">
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 12,
-                background: "linear-gradient(135deg, #EC407A, #A855F7)",
-                color: "#fff",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontWeight: 700,
-                fontSize: 13,
-              }}
-            >
-              NC
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                Nova Cosmétique
-              </div>
-              <div style={{ fontSize: 11, color: "var(--gray-500)" }}>Plan Croissance</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--gray-500)" }}>
+              Sections
             </div>
           </div>
           {TABS.map((t) => (
             <button
               key={t.id}
               type="button"
-              className={"item" + (tab === t.id ? " active" : "")}
+              className={`glass-sidenav-item ${tab === t.id ? "active" : ""}`}
               onClick={() => setTab(t.id)}
             >
-              <Icon name={t.icon} size={14} />
-              <span>{t.label}</span>
+              <Icon name={t.icon} size={14} /> {t.label}
             </button>
           ))}
         </aside>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        <main style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           {tab === "profile" && (
-            <>
-              <div className="glass-panel">
-                <div className="glass-panelhead">
-                  <h3 style={{ margin: 0, fontSize: 14 }}>Informations de l&apos;entreprise</h3>
-                </div>
-                <div className="glass-formgrid" style={{ padding: 16 }}>
-                  <LabelledInput label="Raison sociale" defaultValue="Nova Cosmétique SAS" />
-                  <LabelledInput label="SIRET" defaultValue="892 014 523 00018" />
-                  <LabelledInput label="TVA intracom" defaultValue="FR31892014523" />
-                  <LabelledInput label="Secteur" defaultValue="Cosmétiques & beauté" />
-                  <LabelledInput label="Adresse" defaultValue="24 rue de Rivoli, 75004 Paris" />
-                  <LabelledInput label="Téléphone" defaultValue="+33 1 42 74 10 18" />
-                  <LabelledInput label="Email principal" defaultValue="contact@nova-cosmetique.fr" />
-                  <LabelledInput label="Site web" defaultValue="https://nova-cosmetique.fr" />
-                </div>
-              </div>
-
-              <div className="glass-panel">
-                <div className="glass-panelhead">
-                  <h3 style={{ margin: 0, fontSize: 14 }}>Facturation</h3>
-                </div>
-                <div className="glass-formgrid" style={{ padding: 16 }}>
-                  <LabelledInput label="Email de facturation" defaultValue="facturation@nova-cosmetique.fr" />
-                  <LabelledInput label="IBAN" defaultValue="FR76 3000 6000 0112 3456 7890 189" />
-                  <LabelledInput label="Référence interne" defaultValue="NOVA-2026" />
-                  <LabelledInput label="Conditions de paiement" defaultValue="30 jours fin de mois" />
-                </div>
-              </div>
-            </>
+            <Section title="Profil entreprise">
+              <Row>
+                <Field label="Nom de l'entreprise">
+                  <input
+                    type="text"
+                    style={inputStyle}
+                    value={value("companyName") ?? ""}
+                    onChange={(e) => setField("companyName", e.target.value)}
+                  />
+                </Field>
+                <Field label="Contact principal">
+                  <input
+                    type="text"
+                    style={inputStyle}
+                    value={value("contactName") ?? ""}
+                    onChange={(e) => setField("contactName", e.target.value)}
+                  />
+                </Field>
+              </Row>
+              <Row>
+                <Field label="Téléphone">
+                  <input
+                    type="tel"
+                    style={inputStyle}
+                    value={value("phone") ?? ""}
+                    onChange={(e) => setField("phone", e.target.value)}
+                  />
+                </Field>
+                <Field label="Site web">
+                  <input
+                    type="url"
+                    style={inputStyle}
+                    placeholder="https://example.com"
+                    value={value("website") ?? ""}
+                    onChange={(e) => setField("website", e.target.value)}
+                  />
+                </Field>
+              </Row>
+              <Row>
+                <Field label="Secteur d'activité">
+                  <select
+                    style={inputStyle}
+                    value={value("sector") ?? ""}
+                    onChange={(e) => setField("sector", e.target.value)}
+                  >
+                    <option value="">— choisir —</option>
+                    {SECTORS.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Ville">
+                  <input
+                    type="text"
+                    style={inputStyle}
+                    value={value("city") ?? ""}
+                    onChange={(e) => setField("city", e.target.value)}
+                  />
+                </Field>
+              </Row>
+              <Row>
+                <Field label="Année de création">
+                  <input
+                    type="text"
+                    style={inputStyle}
+                    placeholder="ex: 2018"
+                    value={value("founded") ?? ""}
+                    onChange={(e) => setField("founded", e.target.value)}
+                  />
+                </Field>
+                <Field label="Effectif">
+                  <input
+                    type="text"
+                    style={inputStyle}
+                    placeholder="ex: 50-100"
+                    value={value("employees") ?? ""}
+                    onChange={(e) => setField("employees", e.target.value)}
+                  />
+                </Field>
+              </Row>
+              <Field label="Siège social">
+                <input
+                  type="text"
+                  style={inputStyle}
+                  value={value("headquarters") ?? ""}
+                  onChange={(e) => setField("headquarters", e.target.value)}
+                />
+              </Field>
+              <Field label="Description">
+                <textarea
+                  rows={3}
+                  style={{ ...inputStyle, resize: "vertical" }}
+                  value={value("description") ?? ""}
+                  onChange={(e) => setField("description", e.target.value)}
+                />
+              </Field>
+            </Section>
           )}
 
           {tab === "brand" && (
-            <>
-              <div className="glass-panel">
-                <div className="glass-panelhead">
-                  <h3 style={{ margin: 0, fontSize: 14 }}>Logo de marque</h3>
-                </div>
+            <Section title="Identité de marque">
+              <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
                 <div
                   style={{
-                    padding: 16,
+                    width: 140,
+                    height: 140,
+                    borderRadius: 16,
+                    background: company?.brandColor
+                      ? `${company.brandColor}1A`
+                      : "var(--gray-100)",
                     display: "flex",
-                    gap: 18,
                     alignItems: "center",
-                    flexWrap: "wrap",
+                    justifyContent: "center",
+                    border: "1px solid var(--gray-200)",
+                    overflow: "hidden",
                   }}
                 >
-                  <div
-                    style={{
-                      width: 120,
-                      height: 120,
-                      borderRadius: 18,
-                      background: "linear-gradient(135deg, #EC407A, #A855F7)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "#fff",
-                      fontFamily: "var(--font-display)",
-                      fontSize: 36,
-                      fontWeight: 700,
-                      letterSpacing: "0.02em",
-                    }}
-                  >
-                    NC
-                  </div>
-                  <div style={{ flex: 1, minWidth: 260 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
-                      Logo principal
-                    </div>
-                    <div style={{ fontSize: 12, color: "var(--gray-500)", lineHeight: 1.5 }}>
-                      Utilisé dans les e-mails, sur les factures et sur les visuels de borne.
-                      PNG ou SVG recommandé, fond transparent, 1024 × 1024 min.
-                    </div>
-                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                      <button type="button" className="glass-btn">
-                        <Icon name="upload-cloud" size={14} /> Remplacer
-                      </button>
-                      <button type="button" className="glass-btn ghost">
-                        Supprimer
-                      </button>
-                    </div>
-                  </div>
+                  {company?.logo?.url || company?.logoUrl ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={company.logo?.url ?? company.logoUrl!}
+                      alt="logo"
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  ) : (
+                    <Icon name="image" size={32} />
+                  )}
                 </div>
-              </div>
-
-              <div className="glass-panel">
-                <div className="glass-panelhead">
-                  <h3 style={{ margin: 0, fontSize: 14 }}>Palette de marque</h3>
-                </div>
-                <div
-                  style={{
-                    padding: 16,
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-                    gap: 12,
-                  }}
-                >
-                  {[
-                    { name: "Primaire", hex: "#EC407A" },
-                    { name: "Secondaire", hex: "#A855F7" },
-                    { name: "Accent", hex: "#F9A8D4" },
-                    { name: "Texte", hex: "#0A0E1F" },
-                  ].map((c) => (
-                    <div
-                      key={c.name}
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div>
+                    <strong style={{ fontSize: 14 }}>Logo</strong>
+                    <p
                       style={{
-                        background: "rgba(255,255,255,0.6)",
-                        border: "1px solid rgba(35,52,102,0.08)",
-                        borderRadius: 12,
-                        padding: 12,
-                        display: "flex",
-                        gap: 12,
-                        alignItems: "center",
+                        fontSize: 12,
+                        color: "var(--gray-500)",
+                        margin: "4px 0 8px",
                       }}
                     >
-                      <div
-                        style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 10,
-                          background: c.hex,
-                          boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.08)",
+                      PNG, JPG ou WebP. Maximum 5 Mo.
+                    </p>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input
+                        ref={fileInput}
+                        type="file"
+                        accept="image/*"
+                        style={{ display: "none" }}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleLogoFile(f);
+                          if (fileInput.current) fileInput.current.value = "";
                         }}
                       />
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 600 }}>{c.name}</div>
-                        <div style={{ fontSize: 11.5, color: "var(--gray-500)", fontFamily: "ui-monospace, Menlo, monospace" }}>
-                          {c.hex}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="glass-panel">
-                <div className="glass-panelhead">
-                  <h3 style={{ margin: 0, fontSize: 14 }}>Typographie</h3>
-                </div>
-                <div style={{ padding: 16, display: "grid", gap: 12 }}>
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--gray-500)" }}>
-                      Titres
-                    </div>
-                    <div style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 700 }}>
-                      Playfair Display
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--gray-500)" }}>
-                      Texte courant
-                    </div>
-                    <div style={{ fontSize: 15 }}>Inter — Regular / Medium / Semibold</div>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
-          {tab === "notifications" && (
-            <div className="glass-panel">
-              <div className="glass-panelhead">
-                <h3 style={{ margin: 0, fontSize: 14 }}>Préférences de notification</h3>
-              </div>
-              <div style={{ padding: 16, display: "grid", gap: 4 }}>
-                <ToggleRow
-                  title="Emails d'activité"
-                  sub="Récapitulatifs hebdomadaires des performances campagnes"
-                  value={notifEmail}
-                  onChange={setNotifEmail}
-                />
-                <ToggleRow
-                  title="Notifications de facturation"
-                  sub="Alertes factures émises, rappels d'échéance, paiements reçus"
-                  value={notifBilling}
-                  onChange={setNotifBilling}
-                />
-                <ToggleRow
-                  title="Rapports mensuels"
-                  sub="PDF récapitulatif envoyé le 1er de chaque mois"
-                  value={notifReports}
-                  onChange={setNotifReports}
-                />
-                <ToggleRow
-                  title="Nouvelles fonctionnalités & offres"
-                  sub="Nouveautés Publeader et offres partenaires"
-                  value={notifMarketing}
-                  onChange={setNotifMarketing}
-                />
-              </div>
-            </div>
-          )}
-
-          {tab === "api" && (
-            <>
-              <div className="glass-panel">
-                <div className="glass-panelhead">
-                  <h3 style={{ margin: 0, fontSize: 14 }}>Clés d&apos;API</h3>
-                  <button type="button" className="glass-btn ghost">
-                    <Icon name="refresh" size={12} /> Régénérer
-                  </button>
-                </div>
-                <div style={{ padding: 16, display: "grid", gap: 12 }}>
-                  <div className="glass-apikey">
-                    <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--gray-500)" }}>
-                      Clé publique
-                    </div>
-                    <div
-                      style={{
-                        fontFamily: "ui-monospace, Menlo, monospace",
-                        fontSize: 12,
-                        padding: "8px 12px",
-                        background: "rgba(35,52,102,0.06)",
-                        borderRadius: 8,
-                        marginTop: 6,
-                      }}
-                    >
-                      pk_live_nova_a3d92fc4b17e9a58
-                    </div>
-                  </div>
-                  <div className="glass-apikey">
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
-                    >
-                      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--gray-500)" }}>
-                        Clé secrète
-                      </div>
                       <button
                         type="button"
-                        className="glass-btn ghost"
-                        style={{ padding: "2px 8px" }}
-                        onClick={() => setApiKeyVisible((v) => !v)}
+                        className="glass-btn"
+                        onClick={() => fileInput.current?.click()}
+                        disabled={logoUploading}
                       >
-                        <Icon name={apiKeyVisible ? "eye-off" : "eye"} size={12} />
-                        {apiKeyVisible ? " Masquer" : " Révéler"}
+                        <Icon name="upload-cloud" size={14} />{" "}
+                        {logoUploading ? "Envoi…" : "Téléverser"}
                       </button>
-                    </div>
-                    <div
-                      style={{
-                        fontFamily: "ui-monospace, Menlo, monospace",
-                        fontSize: 12,
-                        padding: "8px 12px",
-                        background: "rgba(35,52,102,0.06)",
-                        borderRadius: 8,
-                        marginTop: 6,
-                      }}
-                    >
-                      {apiKeyVisible
-                        ? "sk_live_nova_8e2b7fa1c30d9e64b521"
-                        : "sk_live_••••••••••••••••••••"}
+                      {(company?.logo?.url || company?.logoUrl) && (
+                        <button
+                          type="button"
+                          className="glass-btn ghost"
+                          onClick={removeLogo}
+                          disabled={logoUploading}
+                        >
+                          <Icon name="trash" size={14} /> Supprimer
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <p style={{ fontSize: 11.5, color: "var(--gray-500)", margin: 0 }}>
-                    Gardez la clé secrète confidentielle. Elle peut lire vos campagnes
-                    et déclencher des exports via notre API REST.
-                  </p>
                 </div>
               </div>
 
-              <div className="glass-panel">
-                <div className="glass-panelhead">
-                  <h3 style={{ margin: 0, fontSize: 14 }}>Webhooks</h3>
-                  <button type="button" className="glass-btn ghost">
-                    <Icon name="plus" size={12} /> Ajouter
-                  </button>
+              <div style={{ height: 1, background: "var(--gray-200)", margin: "16px 0" }} />
+
+              <Field label="Couleur de marque">
+                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                  <input
+                    type="color"
+                    value={value("brandColor") ?? "#000000"}
+                    onChange={(e) => setField("brandColor", e.target.value)}
+                    style={{
+                      width: 56,
+                      height: 40,
+                      border: "1px solid var(--gray-200)",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                    }}
+                  />
+                  <input
+                    type="text"
+                    style={{ ...inputStyle, fontFamily: "monospace", maxWidth: 160 }}
+                    placeholder="#FF5733"
+                    value={value("brandColor") ?? ""}
+                    onChange={(e) => setField("brandColor", e.target.value)}
+                  />
+                  <span style={{ fontSize: 12, color: "var(--gray-500)" }}>
+                    Apparaît derrière votre logo et sur vos campagnes.
+                  </span>
                 </div>
-                <div style={{ padding: 16, display: "grid", gap: 10 }}>
-                  {[
-                    { url: "https://nova-cosmetique.fr/hooks/publeader", events: "campaign.* · invoice.paid", status: "Actif" },
-                    { url: "https://zap.hooks/nova/reports", events: "report.ready", status: "Actif" },
-                  ].map((w) => (
-                    <div
-                      key={w.url}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        padding: "11px 14px",
-                        background: "rgba(255,255,255,0.6)",
-                        border: "1px solid rgba(35,52,102,0.08)",
-                        borderRadius: 12,
-                      }}
-                    >
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {w.url}
-                        </div>
-                        <div style={{ fontSize: 11.5, color: "var(--gray-500)" }}>
-                          {w.events}
-                        </div>
-                      </div>
-                      <span className="ent-chip paid">{w.status}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </>
+              </Field>
+            </Section>
           )}
-        </div>
+
+          {tab === "legal" && (
+            <Section title="Informations légales">
+              <p style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 12 }}>
+                Ces informations apparaîtront sur les factures et contrats.
+              </p>
+              <Row>
+                <Field label="Raison sociale">
+                  <input
+                    type="text"
+                    style={inputStyle}
+                    placeholder="Nova Cosmétique SAS"
+                    value={value("legalName") ?? ""}
+                    onChange={(e) => setField("legalName", e.target.value)}
+                  />
+                </Field>
+                <Field label="Forme juridique">
+                  <select
+                    style={inputStyle}
+                    value={value("legalForm") ?? ""}
+                    onChange={(e) =>
+                      setField(
+                        "legalForm",
+                        e.target.value as CompanyDTO["legalForm"],
+                      )
+                    }
+                  >
+                    <option value="">— choisir —</option>
+                    {LEGAL_FORMS.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </Row>
+              <Row>
+                <Field label="SIRET">
+                  <input
+                    type="text"
+                    style={{ ...inputStyle, fontFamily: "monospace" }}
+                    placeholder="14 chiffres"
+                    value={value("siret") ?? ""}
+                    onChange={(e) => setField("siret", e.target.value)}
+                  />
+                </Field>
+                <Field label="Numéro TVA">
+                  <input
+                    type="text"
+                    style={{ ...inputStyle, fontFamily: "monospace" }}
+                    placeholder="FR12345678901"
+                    value={value("vatNumber") ?? ""}
+                    onChange={(e) => setField("vatNumber", e.target.value)}
+                  />
+                </Field>
+              </Row>
+            </Section>
+          )}
+        </main>
       </div>
     </div>
   );
 }
 
-function LabelledInput({ label, defaultValue }: { label: string; defaultValue?: string }) {
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "8px 12px",
+  border: "1px solid var(--gray-200)",
+  borderRadius: 6,
+  fontSize: 14,
+  background: "white",
+};
+
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
-    <label style={{ display: "grid", gap: 5 }}>
-      <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--gray-500)" }}>
-        {label}
-      </span>
-      <input className="glass-input" defaultValue={defaultValue} />
-    </label>
+    <div className="glass-card" style={{ padding: 24 }}>
+      <h2 style={{ fontSize: 16, marginBottom: 16, fontWeight: 700 }}>{title}</h2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {children}
+      </div>
+    </div>
   );
 }
 
-function ToggleRow({
-  title,
-  sub,
-  value,
-  onChange,
-}: {
-  title: string;
-  sub: string;
-  value: boolean;
-  onChange: (v: boolean) => void;
-}) {
+function Row({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "12px 0",
-        borderBottom: "1px solid rgba(35,52,102,0.06)",
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 14,
       }}
     >
-      <div>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>{title}</div>
-        <div style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}>{sub}</div>
-      </div>
-      <button
-        type="button"
-        className={"glass-switch" + (value ? " on" : "")}
-        aria-pressed={value}
-        onClick={() => onChange(!value)}
+      {children}
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label
+        style={{
+          display: "block",
+          fontSize: 12,
+          color: "var(--gray-600)",
+          marginBottom: 6,
+          fontWeight: 600,
+        }}
       >
-        <span />
-      </button>
+        {label}
+      </label>
+      {children}
     </div>
   );
 }

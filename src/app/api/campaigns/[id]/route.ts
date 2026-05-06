@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { Collections, type CampaignDoc } from "@/lib/schemas";
 import { requireDriver } from "@/lib/session";
 import { applyExpectedStatus, syncStatusToDb } from "@/lib/campaign-lifecycle";
-import { serializeCampaign } from "@/lib/campaign-serializer";
+import { serializeCampaignWithBrand } from "@/lib/campaign-serializer";
 
 export async function GET(
   req: NextRequest,
@@ -42,5 +42,7 @@ export async function GET(
     syncStatusToDb(doc, reconciled.status);
   }
 
-  return NextResponse.json({ campaign: serializeCampaign(reconciled) });
+  return NextResponse.json({
+    campaign: await serializeCampaignWithBrand(reconciled),
+  });
 }
