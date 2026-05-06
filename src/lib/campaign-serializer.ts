@@ -9,6 +9,9 @@ export type CampaignDTO = {
   domain: string;
   title: string;
   description: string;
+  campaignType: CampaignDoc["campaignType"];
+  budgetTier: CampaignDoc["budgetTier"];
+  budgetCents: number;
   city: string;
   zones: string[];
   startDate: string;
@@ -24,6 +27,8 @@ export type CampaignDTO = {
   assignedDriverIds: string[];
   trackingMode: CampaignDoc["trackingMode"];
   heroImageUrl?: string;
+  assetIds?: string[];
+  borne?: { count: number; targetImpressions: number; terminalIds?: string[] };
   // Brand metadata joined from CompanyDoc (best-effort).
   brandColor?: string;
   brandLogoUrl?: string;
@@ -40,6 +45,10 @@ export function serializeCampaign(
     domain: c.domain,
     title: c.title,
     description: c.description,
+    // Pre-A4 docs may lack these fields; default for backward compatibility.
+    campaignType: c.campaignType ?? "flocage",
+    budgetTier: c.budgetTier ?? "boost",
+    budgetCents: c.budgetCents ?? 0,
     city: c.city,
     zones: c.zones,
     startDate: c.startDate.toISOString(),
@@ -55,6 +64,8 @@ export function serializeCampaign(
     assignedDriverIds: c.assignedDriverIds,
     trackingMode: c.trackingMode,
     heroImageUrl: c.heroImageUrl,
+    assetIds: c.assetIds,
+    borne: c.borne,
     brandColor: brand?.brandColor,
     brandLogoUrl: brand?.brandLogoUrl,
   };

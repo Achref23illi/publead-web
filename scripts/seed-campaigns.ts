@@ -248,6 +248,10 @@ async function main() {
       domain: c.domain,
       title: c.title,
       description: c.description,
+      // Pre-A4 seed campaigns are all flocage; tier defaults to growth.
+      campaignType: "flocage",
+      budgetTier: "growth",
+      budgetCents: c.rewardCents * c.driversNeeded,
       city: c.city,
       zones: c.zones,
       startDate,

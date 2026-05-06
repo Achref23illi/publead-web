@@ -138,6 +138,62 @@ export type CampaignStatus =
 
 export type TrackingMode = "gps" | "manual";
 
+export type CampaignType = "flocage" | "borne";
+
+export type BudgetTier = "boost" | "growth" | "leader";
+
+export const BUDGET_TIERS: BudgetTier[] = ["boost", "growth", "leader"];
+
+// Suggested defaults shown in the wizard when an advertiser picks a tier.
+// Values are presets only — advertisers may override every field below.
+export const BUDGET_TIER_PRESETS: Record<
+  BudgetTier,
+  {
+    label: string;
+    budgetCents: number;
+    durationDays: number;
+    flocageDrivers: number;
+    flocageRewardCents: number;
+    borneCount: number;
+    borneTargetImpressions: number;
+  }
+> = {
+  boost: {
+    label: "BOOST",
+    budgetCents: 150_000, // 1500 €
+    durationDays: 14,
+    flocageDrivers: 3,
+    flocageRewardCents: 30_000, // 300 € / driver
+    borneCount: 2,
+    borneTargetImpressions: 10_000,
+  },
+  growth: {
+    label: "GROWTH",
+    budgetCents: 500_000, // 5000 €
+    durationDays: 30,
+    flocageDrivers: 8,
+    flocageRewardCents: 50_000, // 500 €
+    borneCount: 5,
+    borneTargetImpressions: 30_000,
+  },
+  leader: {
+    label: "LEADER",
+    budgetCents: 1_200_000, // 12000 €
+    durationDays: 60,
+    flocageDrivers: 20,
+    flocageRewardCents: 50_000,
+    borneCount: 12,
+    borneTargetImpressions: 100_000,
+  },
+};
+
+export type BorneCampaignFields = {
+  count: number;
+  targetImpressions: number;
+  // Optional pre-assigned terminals (filled by admin/partner ops, not wizard).
+  terminalIds?: string[];
+};
+
 export type CampaignDoc = {
   _id?: ObjectId;
   companyId: string;
@@ -145,12 +201,18 @@ export type CampaignDoc = {
   domain: string;
   title: string;
   description: string;
+  // Discriminator. Existing pre-A4 docs default to "flocage" on read.
+  campaignType: CampaignType;
+  // Pricing tier picked at creation. Stored for analytics + admin views.
+  budgetTier: BudgetTier;
+  // Total billed amount, in cents. Independent from per-driver reward.
+  budgetCents: number;
   city: string;
   zones: string[];
   startDate: Date;
   endDate: Date;
   durationDays: number;
-  // Reward per assigned driver, stored in cents.
+  // Reward per assigned driver, stored in cents. Always 0 for borne.
   rewardCents: number;
   status: CampaignStatus;
   progress: number;
@@ -164,9 +226,25 @@ export type CampaignDoc = {
   // Asset references owned by the same company. Populated by the campaign
   // creation wizard (A4); A3 reads aggregate counts off this field.
   assetIds?: string[];
+  // Borne-specific fields. Required when campaignType === "borne", absent
+  // otherwise.
+  borne?: BorneCampaignFields;
   createdAt: Date;
   updatedAt: Date;
 };
+
+// Fields whose mutation requires the campaign to still be a draft. Editing
+// them after publish would change a commercial commitment.
+export const CAMPAIGN_LOCKED_AFTER_PUBLISH = [
+  "campaignType",
+  "city",
+  "startDate",
+  "budgetTier",
+  "budgetCents",
+  "rewardCents",
+  "driversNeeded",
+  "borne",
+] as const;
 
 // --- Advertiser asset library (A3) ---
 
