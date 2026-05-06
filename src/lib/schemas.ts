@@ -161,6 +161,45 @@ export type CampaignDoc = {
   assignedDriverIds: string[];
   trackingMode: TrackingMode;
   heroImageUrl?: string;
+  // Asset references owned by the same company. Populated by the campaign
+  // creation wizard (A4); A3 reads aggregate counts off this field.
+  assetIds?: string[];
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+// --- Advertiser asset library (A3) ---
+
+export type AssetType = "visual" | "video" | "logo" | "brief";
+
+export const ASSET_TYPES: AssetType[] = ["visual", "video", "logo", "brief"];
+
+// Cloudinary upload limits per asset type (bytes). Enforced at /api/me/assets
+// POST (after upload) and reflected in the UI hint.
+export const ASSET_MAX_BYTES: Record<AssetType, number> = {
+  visual: 10 * 1024 * 1024, // 10 MB
+  logo: 5 * 1024 * 1024, //  5 MB
+  brief: 20 * 1024 * 1024, // 20 MB
+  video: 100 * 1024 * 1024, // 100 MB
+};
+
+// Allowed Cloudinary resource_type per asset type — server rejects mismatches.
+export const ASSET_RESOURCE_TYPES: Record<AssetType, ("image" | "video" | "raw")[]> = {
+  visual: ["image"],
+  logo: ["image"],
+  video: ["video"],
+  brief: ["raw", "image"], // pdfs come back as 'raw' from Cloudinary
+};
+
+export type AssetDoc = {
+  _id?: ObjectId;
+  companyId: string;
+  type: AssetType;
+  name: string;
+  file: FileMeta & {
+    duration?: number; // for videos
+  };
+  uploadedBy: string;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -325,4 +364,5 @@ export const Collections = {
   appConfig: "app_config",
   documents: "documents",
   vehicles: "vehicles",
+  assets: "assets",
 } as const;

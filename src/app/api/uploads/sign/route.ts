@@ -47,6 +47,17 @@ export async function POST(req: NextRequest) {
       );
     }
     folder = `publeader/companies/${auth.user.companyId}/logo`;
+  } else if (scope === "asset" || scope === "visual") {
+    if (auth.user.role !== "advertiser" && auth.user.role !== "team_member") {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+    if (!auth.user.companyId) {
+      return NextResponse.json(
+        { error: "company profile missing" },
+        { status: 409 },
+      );
+    }
+    folder = `publeader/companies/${auth.user.companyId}/assets`;
   }
 
   try {
