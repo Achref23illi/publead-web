@@ -1,18 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
 import bcrypt from "bcrypt";
 import { db } from "@/lib/db";
 import {
+  CARTRIDGE_SLOT_COUNT,
   Collections,
+  type CartridgeSlot,
   type ScreenStatus,
   type TerminalDoc,
 } from "@/lib/schemas";
 import { resolveTerminalStatus } from "@/lib/terminal-service";
 
+type CartridgeUpdate = {
+  slot: number;
+  // Optional: hardware may also report which scent SKU is loaded. Server
+  // ignores unknown SKUs (admin must add them via /api/admin/scents first).
+  scentSku?: string;
+  spraysSinceRefill?: number;
+  levelPercent?: number;
+};
+
 type HeartbeatBody = {
   terminalCode?: string;
   spraysToday?: number;
   screenStatus?: ScreenStatus;
+  cartridges?: CartridgeUpdate[];
 };
 
 const VALID_SCREEN_STATUS: ScreenStatus[] = ["active", "idle", "fault"];
@@ -64,6 +75,38 @@ export async function POST(req: NextRequest) {
     update.screenStatus = body.screenStatus;
   }
 
+  // Apply cartridge snapshot. Each entry replaces the matching slot's
+  // sprays + level fields; scent assignment only changes when scentSku
+  // resolves to a known scent and matches/replaces the existing slot.
+  if (body.cartridges?.length) {
+    const skuMap = await loadScentSkuMap(body.cartridges);
+    const merged: CartridgeSlot[] = terminal.cartridges.map((existing) => {
+      const incoming = body.cartridges!.find((c) => c.slot === existing.slot);
+      if (!incoming) return existing;
+      const next: CartridgeSlot = { ...existing };
+      if (
+        typeof incoming.spraysSinceRefill === "number" &&
+        incoming.spraysSinceRefill >= 0
+      ) {
+        next.spraysSinceRefill = Math.floor(incoming.spraysSinceRefill);
+      }
+      if (
+        typeof incoming.levelPercent === "number" &&
+        incoming.levelPercent >= 0 &&
+        incoming.levelPercent <= 100
+      ) {
+        next.levelPercent = incoming.levelPercent;
+      }
+      // scentSku optional override — only set if catalog match.
+      if (incoming.scentSku) {
+        const id = skuMap.get(incoming.scentSku.toUpperCase());
+        if (id) next.scentId = id;
+      }
+      return next;
+    });
+    update.cartridges = merged;
+  }
+
   await db
     .collection(Collections.terminals)
     .updateOne({ _id: terminal._id }, { $set: update });
@@ -79,4 +122,18 @@ export async function POST(req: NextRequest) {
     status: resolved.status,
     serverTime: now.toISOString(),
   });
+}
+
+async function loadScentSkuMap(
+  cartridges: CartridgeUpdate[],
+): Promise<Map<string, string>> {
+  const skus = cartridges
+    .map((c) => c.scentSku?.toUpperCase().trim())
+    .filter((s): s is string => !!s);
+  if (!skus.length) return new Map();
+  const docs = await db
+    .collection(Collections.scents)
+    .find({ sku: { $in: Array.from(new Set(skus)) } })
+    .toArray();
+  return new Map(docs.map((d) => [d.sku as string, d._id.toString()]));
 }

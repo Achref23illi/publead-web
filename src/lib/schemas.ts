@@ -465,6 +465,9 @@ export type TerminalDoc = {
   coords: { lat: number; lng: number };
   // Bcrypt hash of the device API key. Raw key shown once at creation.
   apiKeyHash: string;
+  // Cartridge bays. Fixed length CARTRIDGE_SLOT_COUNT. Slots may be empty
+  // (scentId undefined) on freshly installed hardware.
+  cartridges: CartridgeSlot[];
   // Last heartbeat snapshot
   lastHeartbeatAt?: Date;
   // Persisted status. Reflects what was true at the last resolver run (read or
@@ -516,6 +519,78 @@ export const TERMINAL_OFFLINE_THRESHOLD_MS = 5 * 60 * 1000;
 // Per-terminal API key length (raw bytes -> hex).
 export const TERMINAL_API_KEY_BYTES = 32;
 
+// --- Stock (P3) ---
+
+export type ScentDoc = {
+  _id?: ObjectId;
+  sku: string; // unique short id like "BDC", "FDO"
+  name: string; // "Bois de Cèdre"
+  defaultCapacityMl: number; // typical cartridge size, default 500
+  color?: string; // hex for UI accent (#8D6E63)
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+// Slots per terminal — fixed at 5 cartridge bays per hardware spec.
+export const CARTRIDGE_SLOT_COUNT = 5;
+
+// Each slot may be unloaded (scentId undefined) on a brand-new terminal.
+export type CartridgeSlot = {
+  slot: number; // 1..CARTRIDGE_SLOT_COUNT
+  scentId?: string; // FK to ScentDoc._id; undefined when slot is empty
+  capacityMl: number; // capacity of physical cartridge currently inserted
+  // levelPercent set if hardware reports it directly (Q2 hybrid). Else
+  // computed from spraysSinceRefill at read time.
+  levelPercent?: number;
+  spraysSinceRefill: number;
+  lastRefillAt?: Date;
+};
+
+export const STOCK_LOW_THRESHOLD_PCT = 50;
+export const STOCK_CRITICAL_THRESHOLD_PCT = 25;
+
+// Volume dispensed per spray. Used to decay level when hardware does not
+// report levelPercent directly. Tunable per-deployment via seed-app-config
+// later if needed.
+export const ML_PER_SPRAY = 0.15;
+
+export type StockStatus = "ok" | "low" | "critical";
+
+export type StockOrderStatus = "pending" | "fulfilled" | "cancelled";
+
+export type StockOrderLine = {
+  scentId: string;
+  qty: number; // number of cartridges ordered
+};
+
+export type StockOrderDoc = {
+  _id?: ObjectId;
+  partnerId: string;
+  terminalId: string;
+  lines: StockOrderLine[];
+  status: StockOrderStatus;
+  notes?: string;
+  createdAt: Date;
+  createdBy: string; // partner userId
+  fulfilledAt?: Date;
+  cancelledAt?: Date;
+  cancelledBy?: string;
+};
+
+export type RefillLogDoc = {
+  _id?: ObjectId;
+  terminalId: string;
+  slot: number;
+  scentId: string;
+  levelBefore: number;
+  levelAfter: number;
+  capacityMl: number;
+  refilledBy: string; // admin userId
+  refilledAt: Date;
+  orderId?: string; // links back to fulfilled order, if any
+  notes?: string;
+};
+
 export const Collections = {
   drivers: "drivers",
   companies: "companies",
@@ -531,4 +606,7 @@ export const Collections = {
   terminals: "terminals",
   terminalEvents: "terminal_events",
   maintenanceWindows: "maintenance_windows",
+  scents: "scents",
+  stockOrders: "stock_orders",
+  refillLogs: "refill_logs",
 } as const;

@@ -1,11 +1,5 @@
-import { PartenaireStub } from "@/screens/partner/PartenaireStub";
+import { PartenaireStock } from "@/screens/partner/PartenaireStock";
 
 export default function PartenaireStockPage() {
-  return (
-    <PartenaireStub
-      title="Stock"
-      subtitle="Inventaire et commandes (P3)."
-      icon="spray-can"
-    />
-  );
+  return <PartenaireStock />;
 }

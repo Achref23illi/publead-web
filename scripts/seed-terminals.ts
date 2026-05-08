@@ -12,6 +12,7 @@ import {
   type TerminalStatus,
   type VenueType,
 } from "../src/lib/schemas";
+import { emptyCartridges } from "../src/lib/stock-service";
 
 type SeedTerminal = {
   code: string;
@@ -180,6 +181,7 @@ async function createTerminal(
     city: s.city,
     coords: s.coords,
     apiKeyHash,
+    cartridges: emptyCartridges(),
     lastHeartbeatAt,
     lastKnownStatus: s.initialStatus,
     spraysToday: s.spraysToday,

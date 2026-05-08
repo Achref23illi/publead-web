@@ -14,6 +14,7 @@ import {
 import { requireAdmin } from "@/lib/session";
 import { resolveMany } from "@/lib/terminal-service";
 import { serializeTerminal } from "@/lib/terminal-serializer";
+import { emptyCartridges } from "@/lib/stock-service";
 
 const VALID_STATUSES: TerminalStatus[] = ["online", "offline", "maintenance"];
 
@@ -103,6 +104,7 @@ export async function POST(req: NextRequest) {
     city: body.city!.trim(),
     coords: { lat: body.coords!.lat!, lng: body.coords!.lng! },
     apiKeyHash,
+    cartridges: emptyCartridges(),
     lastKnownStatus: "offline",
     spraysToday: 0,
     screenStatus: "idle",
