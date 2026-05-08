@@ -10,6 +10,7 @@ import {
 } from "@/lib/schemas";
 import { resolveTerminalStatus } from "@/lib/terminal-service";
 import { applyImpressionDeltas } from "@/lib/ad-schedule-service";
+import { incrementDailySprays } from "@/lib/partner-revenue-service";
 
 type CartridgeUpdate = {
   slot: number;
@@ -75,8 +76,22 @@ export async function POST(req: NextRequest) {
     lastHeartbeatAt: now,
     updatedAt: now,
   };
+  // Compute spray delta against previously stored value before mutating.
+  // Same-day: delta = max(0, new - old). Cross-day or first heartbeat: count
+  // the new value as today's sprays from scratch.
+  let sprayDelta = 0;
   if (typeof body.spraysToday === "number" && body.spraysToday >= 0) {
-    update.spraysToday = Math.floor(body.spraysToday);
+    const incoming = Math.floor(body.spraysToday);
+    update.spraysToday = incoming;
+    const prevDate = terminal.lastHeartbeatAt
+      ? new Date(terminal.lastHeartbeatAt).toISOString().slice(0, 10)
+      : null;
+    const todayDate = now.toISOString().slice(0, 10);
+    if (prevDate === todayDate) {
+      sprayDelta = Math.max(0, incoming - (terminal.spraysToday ?? 0));
+    } else {
+      sprayDelta = incoming;
+    }
   }
   if (body.screenStatus && VALID_SCREEN_STATUS.includes(body.screenStatus)) {
     update.screenStatus = body.screenStatus;
@@ -125,6 +140,16 @@ export async function POST(req: NextRequest) {
       body.impressions.filter(
         (i) => typeof i.campaignId === "string" && typeof i.delta === "number",
       ),
+      now,
+    );
+  }
+
+  // Increment partner's daily revenue counter from the spray delta (P5).
+  if (sprayDelta > 0) {
+    await incrementDailySprays(
+      terminal.partnerId,
+      terminal._id!.toString(),
+      sprayDelta,
       now,
     );
   }

@@ -124,8 +124,13 @@ export type PartnerDoc = {
   address: string;
   city: string;
   openingHours?: string;
-  monthlySprayRevenue: number;
-  monthlyAdsRevenue: number;
+  // Deprecated: legacy euro-denominated cached fields. Computed live now from
+  // RevenueDailyDoc + AdImpressionDailyDoc. Kept on type so existing seed +
+  // mock callers compile.
+  monthlySprayRevenue?: number;
+  monthlyAdsRevenue?: number;
+  // P5: admin-set monthly revenue target. Drives "% of objective" displays.
+  monthlyTargetCents?: number;
   status: ValidationStatus;
   createdAt: Date;
 };
@@ -669,6 +674,83 @@ export type AdIssueReportDoc = {
   resolution?: string;
 };
 
+// --- Partner Revenue (P5) ---
+
+// Per-spray + per-1000-impression rates. Stored in Collections.appConfig
+// alongside the existing "payments" key. Fallback defaults below.
+export type PartnerRevenueConfigDoc = {
+  _id?: ObjectId;
+  key: "partner_revenue";
+  sprayRateCents: number; // earned per spray
+  cpmCents: number; // earned per 1000 impressions
+  updatedAt: Date;
+};
+
+export const PARTNER_REVENUE_DEFAULT_SPRAY_CENTS = 8;
+export const PARTNER_REVENUE_DEFAULT_CPM_CENTS = 200;
+
+// Daily counter row. Sprays are incremented by the heartbeat handler when a
+// terminal reports a higher spraysToday than was previously stored. Ad
+// impressions are NOT duplicated here — they live in AdImpressionDailyDoc and
+// are joined at read time. Revenue cents are computed on read using current
+// rates.
+export type RevenueDailyDoc = {
+  _id?: ObjectId;
+  partnerId: string;
+  terminalId: string;
+  date: string; // "YYYY-MM-DD" UTC
+  spraysCount: number;
+  updatedAt: Date;
+};
+
+// Sealed monthly snapshot. Rates are frozen so re-issuing a statement yields
+// the same numbers even after admin tunes config.
+export type RevenueMonthlyTerminalLine = {
+  terminalId: string;
+  terminalCode?: string;
+  terminalName?: string;
+  spraysCount: number;
+  impressions: number;
+  sprayCents: number;
+  adCents: number;
+  totalCents: number;
+};
+
+export type RevenueMonthlyDoc = {
+  _id?: ObjectId;
+  partnerId: string;
+  month: string; // "YYYY-MM"
+  totalSprays: number;
+  totalImpressions: number;
+  sprayRateCents: number;
+  cpmCents: number;
+  sprayCents: number;
+  adCents: number;
+  totalCents: number;
+  perTerminal: RevenueMonthlyTerminalLine[];
+  sealedAt: Date;
+};
+
+// Auto-created at month seal. Admin marks paid in batch.
+export type PartnerPayoutStatus = "scheduled" | "paid" | "failed";
+
+export type PartnerPayoutDoc = {
+  _id?: ObjectId;
+  partnerId: string;
+  month: string; // "YYYY-MM"
+  totalCents: number;
+  status: PartnerPayoutStatus;
+  scheduledFor: Date; // when admin should process payment
+  paidAt?: Date;
+  paidBy?: string; // admin userId
+  payoutReference?: string;
+  failureReason?: string;
+  createdAt: Date;
+};
+
+// Day of the month (1..28) when scheduled payouts should be processed.
+export const PARTNER_PAYOUT_SCHEDULE_DAY = 5;
+
 export const Collections = {
   drivers: "drivers",
   companies: "companies",
@@ -690,4 +772,7 @@ export const Collections = {
   adSchedules: "ad_schedules",
   adImpressionsDaily: "ad_impressions_daily",
   adIssueReports: "ad_issue_reports",
+  revenueDaily: "revenue_daily",
+  revenueMonthly: "revenue_monthly",
+  partnerPayouts: "partner_payouts",
 } as const;
