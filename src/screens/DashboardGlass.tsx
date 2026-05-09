@@ -1,16 +1,82 @@
 "use client";
 
-/**
- * DashboardGlass — rond/vitré dashboard.
- * Port of dashboard-glass.jsx's <DashboardGlass>.
- */
-
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Icon } from "@/components/Icon";
 import { Sparkline } from "@/components/charts";
-import { CAMPAIGNS, CITY_DIST, VALIDATION_QUEUE } from "@/lib/data";
+import type { AdminDashboardDTO } from "@/lib/dashboard-serializer";
+
+const VALIDATION_KIND_LABEL: Record<"driver" | "company" | "partner", string> = {
+  driver: "Chauffeur",
+  company: "Entreprise",
+  partner: "Partenaire",
+};
+
+function eur(cents: number): string {
+  return `${(cents / 100).toLocaleString("fr-FR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })} €`;
+}
+
+function fmtNumber(n: number): string {
+  return n.toLocaleString("fr-FR");
+}
+
+function fmtSince(iso: string): string {
+  const d = new Date(iso);
+  const now = Date.now();
+  const diff = now - d.getTime();
+  const day = 86_400_000;
+  if (diff < day) return "aujourd'hui";
+  if (diff < 2 * day) return "hier";
+  return `il y a ${Math.floor(diff / day)} j`;
+}
+
+function fmtDelta(delta: number | null): string | null {
+  if (delta === null) return null;
+  const sign = delta > 0 ? "+" : "";
+  return `${sign}${delta} %`;
+}
 
 export function DashboardGlass() {
+  const [data, setData] = useState<AdminDashboardDTO | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/api/admin/dashboard", { credentials: "include" });
+        const json = (await r.json()) as AdminDashboardDTO;
+        if (!cancelled) setData(json);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const today = new Date().toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
+  // Synthetic sparkline driven off finance KPI as a fallback. Real point-by
+  // -point monthly trend lives behind the revenue endpoint and is drawn on
+  // the Pro variant; the glass hero just needs a hint at shape.
+  const sparkData = data
+    ? Array.from({ length: 15 }, (_, i) => 1 + i * 0.5)
+    : [];
+
+  const mrr = data?.finance.collectedCents ?? 0;
+  const mrrDelta = data ? fmtDelta(data.mrrDelta) : null;
+  const fleet = data?.fleet;
+  const counts = data?.counts;
+
   return (
     <div className="glass-page">
       <div className="glass-pagehead">
@@ -19,7 +85,7 @@ export function DashboardGlass() {
             Vue d&apos;ensemble
           </h1>
           <p style={{ margin: "4px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-            Activité consolidée — Publeader 20 avr. 2026
+            Activité consolidée — Publeader {today}
           </p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
@@ -52,7 +118,7 @@ export function DashboardGlass() {
               opacity: 0.85,
             }}
           >
-            Revenus cumulés
+            Encaissé ce mois
           </div>
           <div
             style={{
@@ -62,23 +128,48 @@ export function DashboardGlass() {
               margin: "4px 0",
             }}
           >
-            24 820 €
+            {loading ? "…" : eur(mrr)}
           </div>
-          <div style={{ fontSize: 13, opacity: 0.9 }}>+12 % vs mois précédent</div>
+          <div style={{ fontSize: 13, opacity: 0.9 }}>
+            {mrrDelta ? `${mrrDelta} vs mois précédent` : "—"}
+          </div>
           <div style={{ marginTop: 18 }}>
-            <Sparkline
-              data={[12, 14, 13, 17, 16, 19, 18, 22, 21, 24, 23, 27, 26, 29, 28]}
-            />
+            <Sparkline data={sparkData.length ? sparkData : [1, 2]} />
           </div>
         </div>
       </div>
 
       <div className="glass-kpigrid">
         {[
-          { l: "Campagnes actives", v: "9", s: "+2 cette semaine" },
-          { l: "Chauffeurs validés", v: "112", s: "sur 128 comptes" },
-          { l: "Bornes en service", v: "6 / 8", s: "2 en alerte" },
-          { l: "Dossiers à valider", v: "16", s: "dont 12 chauffeurs" },
+          {
+            l: "Campagnes actives",
+            v: counts ? fmtNumber(counts.campaignsActive) : "—",
+            s:
+              counts && counts.campaignsCompletedThisMonth > 0
+                ? `${counts.campaignsCompletedThisMonth} terminée(s) ce mois`
+                : "—",
+          },
+          {
+            l: "Chauffeurs validés",
+            v: counts ? fmtNumber(counts.driversValidated) : "—",
+            s: counts
+              ? `${counts.driversPending} en attente`
+              : "—",
+          },
+          {
+            l: "Bornes en service",
+            v: fleet ? `${fleet.online} / ${fleet.installed}` : "—",
+            s: fleet
+              ? `${fleet.inMaintenance} en maintenance · ${fleet.offline} hors-ligne`
+              : "—",
+          },
+          {
+            l: "Dossiers à valider",
+            v: counts ? fmtNumber(counts.validationQueueTotal) : "—",
+            s: counts
+              ? `dont ${counts.validationQueueByKind.driver} chauffeurs`
+              : "—",
+          },
         ].map((k) => (
           <div key={k.l} className="glass-kpi">
             <div
@@ -130,11 +221,12 @@ export function DashboardGlass() {
                 <th>Campagne</th>
                 <th>Ville</th>
                 <th style={{ textAlign: "right" }}>Progression</th>
-                <th style={{ textAlign: "right" }}>Revenu</th>
+                <th style={{ textAlign: "right" }}>Budget</th>
               </tr>
             </thead>
             <tbody>
-              {CAMPAIGNS.filter((c) => c.status === "active")
+              {(data?.recentCampaigns ?? [])
+                .filter((c) => c.status === "active")
                 .slice(0, 5)
                 .map((c) => (
                   <tr key={c.id}>
@@ -142,30 +234,65 @@ export function DashboardGlass() {
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <div
                           className="brand-logo"
-                          style={{ background: c.color, width: 32, height: 32, fontSize: 12 }}
+                          style={{
+                            background: c.brandColor ?? "#233466",
+                            width: 32,
+                            height: 32,
+                            fontSize: 12,
+                          }}
                         >
-                          {c.initials}
+                          {c.brand
+                            .split(" ")
+                            .map((s) => s[0])
+                            .slice(0, 2)
+                            .join("")
+                            .toUpperCase()}
                         </div>
                         <div>
                           <div style={{ fontWeight: 600 }}>{c.brand}</div>
-                          <div style={{ fontSize: 11, color: "var(--gray-500)" }}>{c.period}</div>
+                          <div style={{ fontSize: 11, color: "var(--gray-500)" }}>
+                            {c.company}
+                          </div>
                         </div>
                       </div>
                     </td>
                     <td>{c.city}</td>
                     <td style={{ textAlign: "right" }}>
                       <div
-                        style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          justifyContent: "flex-end",
+                        }}
                       >
-                        <span style={{ fontSize: 12, color: "var(--gray-500)" }}>{c.progress}%</span>
+                        <span style={{ fontSize: 12, color: "var(--gray-500)" }}>
+                          {c.progress}%
+                        </span>
                         <div className="glass-progress" style={{ width: 60 }}>
                           <div style={{ width: c.progress + "%" }} />
                         </div>
                       </div>
                     </td>
-                    <td style={{ textAlign: "right", fontWeight: 700 }}>{c.rev}</td>
+                    <td style={{ textAlign: "right", fontWeight: 700 }}>
+                      {eur(c.budgetCents)}
+                    </td>
                   </tr>
                 ))}
+              {!loading && (data?.recentCampaigns ?? []).length === 0 && (
+                <tr>
+                  <td
+                    colSpan={4}
+                    style={{
+                      textAlign: "center",
+                      padding: 24,
+                      color: "var(--gray-500)",
+                    }}
+                  >
+                    Aucune campagne récente.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -186,9 +313,9 @@ export function DashboardGlass() {
             </Link>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16 }}>
-            {VALIDATION_QUEUE.map((v) => (
+            {(data?.validationQueue ?? []).map((v) => (
               <div
-                key={v.id}
+                key={`${v.kind}-${v.id}`}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -199,12 +326,21 @@ export function DashboardGlass() {
                 }}
               >
                 <div>
-                  <div style={{ fontSize: 11, color: "var(--gray-500)" }}>{v.kind}</div>
+                  <div style={{ fontSize: 11, color: "var(--gray-500)" }}>
+                    {VALIDATION_KIND_LABEL[v.kind]}
+                  </div>
                   <div style={{ fontWeight: 600, fontSize: 13 }}>{v.name}</div>
                 </div>
-                <div style={{ fontSize: 11, color: "var(--gray-500)" }}>{v.since}</div>
+                <div style={{ fontSize: 11, color: "var(--gray-500)" }}>
+                  {fmtSince(v.since)}
+                </div>
               </div>
             ))}
+            {!loading && (data?.validationQueue ?? []).length === 0 && (
+              <div style={{ color: "var(--gray-500)", fontSize: 13 }}>
+                Rien en attente.
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -214,12 +350,19 @@ export function DashboardGlass() {
           <h3 style={{ margin: 0, fontSize: 14 }}>Distribution par ville</h3>
         </div>
         <div style={{ padding: 16, display: "flex", flexWrap: "wrap", gap: 12 }}>
-          {CITY_DIST.map((c) => (
+          {(data?.cities ?? []).map((c) => (
             <div key={c.city} className="glass-city-count">
               <div style={{ fontSize: 12, fontWeight: 600 }}>{c.city}</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--navy)" }}>{c.count}</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--navy)" }}>
+                {c.count}
+              </div>
             </div>
           ))}
+          {!loading && (data?.cities ?? []).length === 0 && (
+            <div style={{ color: "var(--gray-500)", fontSize: 13 }}>
+              Aucune campagne géolocalisée.
+            </div>
+          )}
         </div>
       </div>
     </div>

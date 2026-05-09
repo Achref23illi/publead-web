@@ -1,48 +1,114 @@
 "use client";
 
-/**
- * EnterpriseDashboard — advertiser home screen.
- * Scoped to a single brand account; shows KPI snapshot, impressions trend,
- * active campaigns, upcoming invoice, and quick actions.
- */
-
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Icon } from "@/components/Icon";
+import type { IconName } from "@/components/Icon";
 import { Sparkline } from "@/components/charts";
-import { CAMPAIGNS } from "@/lib/data";
+import type { AdvertiserDashboardDTO } from "@/lib/dashboard-serializer";
+import type { CampaignDTO } from "@/lib/campaign-serializer";
 
-// Advertiser-scoped subset of the agency's campaigns.
-const MY_CAMPAIGNS = CAMPAIGNS.slice(0, 4);
-
-const IMPRESSIONS_TREND = [
-  120, 145, 128, 160, 182, 172, 195, 210, 230, 218, 244, 260, 255, 280, 296,
-  310, 292, 320, 336, 354, 348, 372, 388, 402, 418, 410, 438, 460, 478, 495,
-];
-
-const RECENT_ACTIVITY = [
-  { id: "a1", icon: "check-circle" as const, text: "Campagne « Nova Printemps » validée par l'équipe", when: "il y a 2 h", tone: "good" },
-  { id: "a2", icon: "car" as const, text: "5 chauffeurs assignés à « Nova Été »", when: "hier", tone: "info" },
-  { id: "a3", icon: "image" as const, text: "Nouveau visuel téléversé — Flocage.png", when: "hier", tone: "info" },
-  { id: "a4", icon: "banknote" as const, text: "Facture F-2026-0418 prête à être réglée", when: "il y a 2 j", tone: "warn" },
-  { id: "a5", icon: "bar-chart-3" as const, text: "Rapport hebdomadaire disponible", when: "il y a 3 j", tone: "info" },
-];
-
-const TONE_COLOR: Record<string, string> = {
-  good: "#15803D",
-  info: "#1D4ED8",
-  warn: "#B45309",
+const ACTIVITY_ICON: Record<
+  AdvertiserDashboardDTO["recentActivity"][number]["type"],
+  IconName
+> = {
+  accept: "car",
+  cancel: "x-circle",
+  complete: "check-circle",
+  status_change: "refresh",
 };
 
+const ACTIVITY_TONE: Record<
+  AdvertiserDashboardDTO["recentActivity"][number]["type"],
+  string
+> = {
+  accept: "#1D4ED8",
+  cancel: "#B45309",
+  complete: "#15803D",
+  status_change: "#1D4ED8",
+};
+
+const ACTIVITY_LABEL: Record<
+  AdvertiserDashboardDTO["recentActivity"][number]["type"],
+  string
+> = {
+  accept: "Chauffeur assigné",
+  cancel: "Désistement chauffeur",
+  complete: "Campagne terminée",
+  status_change: "Changement de statut",
+};
+
+function eur(cents: number): string {
+  return `${(cents / 100).toLocaleString("fr-FR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })} €`;
+}
+
+function fmtNumber(n: number): string {
+  return n.toLocaleString("fr-FR");
+}
+
+function fmtSince(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = 60_000;
+  const hr = 60 * min;
+  const day = 24 * hr;
+  if (ms < hr) return `il y a ${Math.max(1, Math.floor(ms / min))} min`;
+  if (ms < day) return `il y a ${Math.floor(ms / hr)} h`;
+  return `il y a ${Math.floor(ms / day)} j`;
+}
+
+function fmtDelta(d: number | null): string {
+  if (d === null) return "—";
+  const sign = d > 0 ? "+" : "";
+  return `${sign}${d} %`;
+}
+
 export function EnterpriseDashboard() {
+  const [data, setData] = useState<AdvertiserDashboardDTO | null>(null);
+  const [campaigns, setCampaigns] = useState<CampaignDTO[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [dashRes, campRes] = await Promise.all([
+          fetch("/api/me/dashboard", { credentials: "include" }),
+          fetch("/api/me/campaigns?status=active", {
+            credentials: "include",
+          }),
+        ]);
+        const dash = (await dashRes.json()) as AdvertiserDashboardDTO;
+        const camp = (await campRes.json()) as { campaigns?: CampaignDTO[] };
+        if (cancelled) return;
+        setData(dash);
+        setCampaigns(camp.campaigns ?? []);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const today = new Date().toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
   return (
     <div className="glass-page">
       <div className="glass-pagehead">
         <div>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: 28, margin: 0 }}>
-            Bonjour, Nova Cosmétique
+            Tableau de bord
           </h1>
           <p style={{ margin: "4px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
-            Résumé de vos campagnes — 20 avr. 2026
+            Résumé de vos campagnes — {today}
           </p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
@@ -55,15 +121,27 @@ export function EnterpriseDashboard() {
         </div>
       </div>
 
-      {/* Brand hero */}
+      {/* Brand hero — impressions */}
       <div className="ent-hero">
         <div className="ent-hero-row">
           <div>
-            <div className="ent-hero-stat-label">Impressions ce mois-ci</div>
-            <div className="ent-hero-stat-value">486 320</div>
-            <div className="ent-hero-stat-sub">+18 % vs le mois dernier · objectif 520 000</div>
+            <div className="ent-hero-stat-label">Impressions ces 30 jours</div>
+            <div className="ent-hero-stat-value">
+              {loading ? "…" : fmtNumber(data?.totalImpressions ?? 0)}
+            </div>
+            <div className="ent-hero-stat-sub">
+              {data
+                ? `${fmtDelta(data.impressionsDelta)} vs 30 jours précédents · objectif ${fmtNumber(data.goalImpressions)}`
+                : "—"}
+            </div>
             <div style={{ marginTop: 18, maxWidth: 620 }}>
-              <Sparkline data={IMPRESSIONS_TREND} />
+              <Sparkline
+                data={
+                  data && data.sparkline.some((v) => v > 0)
+                    ? data.sparkline
+                    : [1, 2]
+                }
+              />
             </div>
           </div>
           <div className="ent-hero-actions">
@@ -80,10 +158,34 @@ export function EnterpriseDashboard() {
       {/* KPI row */}
       <div className="glass-kpigrid">
         {[
-          { l: "Campagnes actives", v: "3", s: "1 en préparation" },
-          { l: "Budget consommé", v: "7 820 €", s: "sur 12 000 € · 65 %" },
-          { l: "Kilomètres parcourus", v: "9 340 km", s: "+12 % vs semaine passée" },
-          { l: "Prochaine facture", v: "2 400 €", s: "échéance 30 avr." },
+          {
+            l: "Campagnes actives",
+            v: data ? fmtNumber(data.campaignsActive) : "—",
+            s: data
+              ? `${data.campaignsTotal} au total`
+              : "—",
+          },
+          {
+            l: "% objectif impressions",
+            v: data ? `${Math.min(999, data.goalPct)} %` : "—",
+            s: data
+              ? `${fmtNumber(data.totalImpressions)} / ${fmtNumber(data.goalImpressions)}`
+              : "—",
+          },
+          {
+            l: "Encaissé ce mois",
+            v: data ? eur(data.billing.paidThisMonthCents) : "—",
+            s: data
+              ? `${data.billing.pendingCount} factures ouvertes`
+              : "—",
+          },
+          {
+            l: "Factures en attente",
+            v: data ? eur(data.billing.pendingCents) : "—",
+            s: data
+              ? `${data.billing.overdueCount} en retard (${eur(data.billing.overdueCents)})`
+              : "—",
+          },
         ].map((k) => (
           <div key={k.l} className="glass-kpi">
             <div
@@ -135,15 +237,25 @@ export function EnterpriseDashboard() {
               </tr>
             </thead>
             <tbody>
-              {MY_CAMPAIGNS.map((c) => (
+              {campaigns.slice(0, 5).map((c) => (
                 <tr key={c.id}>
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <div
                         className="brand-logo"
-                        style={{ background: c.color, width: 32, height: 32, fontSize: 12 }}
+                        style={{
+                          background: c.brandColor ?? "#233466",
+                          width: 32,
+                          height: 32,
+                          fontSize: 12,
+                        }}
                       >
-                        {c.initials}
+                        {c.brand
+                          .split(" ")
+                          .map((s) => s[0])
+                          .slice(0, 2)
+                          .join("")
+                          .toUpperCase()}
                       </div>
                       <div>
                         <Link
@@ -152,22 +264,49 @@ export function EnterpriseDashboard() {
                         >
                           {c.brand}
                         </Link>
-                        <div style={{ fontSize: 11, color: "var(--gray-500)" }}>{c.period}</div>
+                        <div style={{ fontSize: 11, color: "var(--gray-500)" }}>
+                          {c.title}
+                        </div>
                       </div>
                     </div>
                   </td>
                   <td>{c.city}</td>
                   <td style={{ textAlign: "right" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
-                      <span style={{ fontSize: 12, color: "var(--gray-500)" }}>{c.progress}%</span>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        justifyContent: "flex-end",
+                      }}
+                    >
+                      <span style={{ fontSize: 12, color: "var(--gray-500)" }}>
+                        {c.progress}%
+                      </span>
                       <div className="glass-progress" style={{ width: 60 }}>
                         <div style={{ width: c.progress + "%" }} />
                       </div>
                     </div>
                   </td>
-                  <td style={{ textAlign: "right", fontWeight: 700 }}>{c.rev}</td>
+                  <td style={{ textAlign: "right", fontWeight: 700 }}>
+                    {eur(c.budgetCents)}
+                  </td>
                 </tr>
               ))}
+              {!loading && campaigns.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={4}
+                    style={{
+                      textAlign: "center",
+                      padding: 24,
+                      color: "var(--gray-500)",
+                    }}
+                  >
+                    Aucune campagne active.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -177,7 +316,7 @@ export function EnterpriseDashboard() {
             <h3 style={{ margin: 0, fontSize: 14 }}>Activité récente</h3>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16 }}>
-            {RECENT_ACTIVITY.map((a) => (
+            {(data?.recentActivity ?? []).map((a) => (
               <div
                 key={a.id}
                 style={{
@@ -199,21 +338,27 @@ export function EnterpriseDashboard() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    color: TONE_COLOR[a.tone],
+                    color: ACTIVITY_TONE[a.type],
                   }}
                 >
-                  <Icon name={a.icon} size={14} />
+                  <Icon name={ACTIVITY_ICON[a.type]} size={14} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12.5, color: "#0A0E1F", lineHeight: 1.4 }}>
-                    {a.text}
+                    {ACTIVITY_LABEL[a.type]}
+                    {a.campaignTitle ? ` — ${a.campaignTitle}` : ""}
                   </div>
                   <div style={{ fontSize: 11, color: "var(--gray-500)", marginTop: 2 }}>
-                    {a.when}
+                    {fmtSince(a.at)}
                   </div>
                 </div>
               </div>
             ))}
+            {!loading && (data?.recentActivity ?? []).length === 0 && (
+              <div style={{ color: "var(--gray-500)", fontSize: 13 }}>
+                Aucune activité récente.
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -232,10 +377,30 @@ export function EnterpriseDashboard() {
           }}
         >
           {[
-            { href: "/enterprise/campagnes/new", icon: "plus" as const, title: "Lancer une campagne", sub: "Brief, ciblage, budget" },
-            { href: "/enterprise/assets", icon: "image" as const, title: "Téléverser des assets", sub: "Visuels prêts au flocage" },
-            { href: "/enterprise/performance", icon: "bar-chart-3" as const, title: "Exporter un rapport", sub: "CSV, PDF, par campagne" },
-            { href: "/enterprise/equipe", icon: "user-plus" as const, title: "Inviter un collègue", sub: "Gérez les accès équipe" },
+            {
+              href: "/enterprise/campagnes/new",
+              icon: "plus" as IconName,
+              title: "Lancer une campagne",
+              sub: "Brief, ciblage, budget",
+            },
+            {
+              href: "/enterprise/assets",
+              icon: "image" as IconName,
+              title: "Téléverser des assets",
+              sub: "Visuels prêts au flocage",
+            },
+            {
+              href: "/enterprise/performance",
+              icon: "bar-chart-3" as IconName,
+              title: "Exporter un rapport",
+              sub: "CSV, PDF, par campagne",
+            },
+            {
+              href: "/enterprise/equipe",
+              icon: "user-plus" as IconName,
+              title: "Inviter un collègue",
+              sub: "Gérez les accès équipe",
+            },
           ].map((a) => (
             <Link
               key={a.href + a.title}
@@ -272,7 +437,6 @@ export function EnterpriseDashboard() {
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{a.title}</div>
                 <div style={{ fontSize: 11.5, color: "var(--gray-500)" }}>{a.sub}</div>
               </div>
-              <Icon name="chevron-right" size={14} />
             </Link>
           ))}
         </div>
