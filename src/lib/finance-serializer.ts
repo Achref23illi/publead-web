@@ -23,6 +23,13 @@ export type InvoiceDTO = {
   paidVia?: string;
   paidReference?: string;
   notes?: string;
+  stripeCheckoutSessionId?: string;
+  stripePaymentIntentId?: string;
+  stripeChargeId?: string;
+  refundedAt?: string;
+  refundedReason?: string;
+  disputedAt?: string;
+  disputedReason?: string;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -52,6 +59,13 @@ export function serializeInvoice(
     paidVia: inv.paidVia,
     paidReference: inv.paidReference,
     notes: inv.notes,
+    stripeCheckoutSessionId: inv.stripeCheckoutSessionId,
+    stripePaymentIntentId: inv.stripePaymentIntentId,
+    stripeChargeId: inv.stripeChargeId,
+    refundedAt: inv.refundedAt?.toISOString(),
+    refundedReason: inv.refundedReason,
+    disputedAt: inv.disputedAt?.toISOString(),
+    disputedReason: inv.disputedReason,
     createdBy: inv.createdBy,
     createdAt: inv.createdAt.toISOString(),
     updatedAt: inv.updatedAt.toISOString(),

@@ -842,9 +842,28 @@ export type InvoiceDoc = {
   paidVia?: string;
   paidReference?: string;
   notes?: string;
+  // Stripe integration. checkoutSessionId is set when payer opens a Checkout
+  // session; payment_intent + charge ids land on the invoice once the webhook
+  // confirms payment. Refund/dispute timestamps revert status to envoyee.
+  stripeCheckoutSessionId?: string;
+  stripePaymentIntentId?: string;
+  stripeChargeId?: string;
+  refundedAt?: Date;
+  refundedReason?: string;
+  disputedAt?: Date;
+  disputedReason?: string;
   createdBy: string; // admin userId
   createdAt: Date;
   updatedAt: Date;
+};
+
+// Idempotency record for Stripe webhook events. We insert with the event id
+// as _id; duplicate deliveries fail the insert and short-circuit the handler.
+export type StripeEventDoc = {
+  _id: string; // stripe event id (evt_...)
+  type: string;
+  receivedAt: Date;
+  invoiceId?: string;
 };
 
 // Default payment terms when none provided.
@@ -911,4 +930,5 @@ export const Collections = {
   partnerPayouts: "partner_payouts",
   invoices: "invoices",
   expenses: "expenses",
+  stripeEvents: "stripe_events",
 } as const;

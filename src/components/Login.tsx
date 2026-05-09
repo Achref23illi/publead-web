@@ -219,6 +219,29 @@ export function Login() {
             {loading ? "Connexion…" : "Se connecter"}
           </button>
 
+          {process.env.NODE_ENV !== "production" && (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 18 }}>
+              <a
+                href="/dev-login"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "6px 12px",
+                  borderRadius: 999,
+                  background: "rgba(244,184,81,0.15)",
+                  color: "#F4B851",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textDecoration: "none",
+                }}
+              >
+                <Icon name="zap" size={12} />
+                FAST LOGIN (DEV)
+              </a>
+            </div>
+          )}
         </div>
       </div>
     </div>

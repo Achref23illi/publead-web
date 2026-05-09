@@ -69,13 +69,23 @@ export async function POST(req: NextRequest, ctx: RouteCtx) {
     const updated = await markInvoiceSent(id, recipient);
     const pdf = await buildInvoicePDF({ invoice: updated, company });
 
+    const site =
+      process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+      "http://localhost:3000";
+    // Link points at our redirect endpoint so each click mints a fresh
+    // Stripe Checkout Session — emails stay valid past Checkout's 24h TTL.
+    const payUrl = `${site}/api/pay/${updated._id!.toString()}/redirect`;
+    const stripeAvailable = !!process.env.STRIPE_SECRET_KEY;
+
+    const defaultText = stripeAvailable
+      ? `Bonjour,\n\nVeuillez trouver ci-joint la facture ${updated.ref} d'un montant de ${eur(updated.totalCents)}.\n\nÉchéance : ${updated.dueDate.toLocaleDateString("fr-FR")}.\n\nPour régler en ligne par carte bancaire :\n${payUrl}\n\nCordialement,\nPubleader`
+      : `Bonjour,\n\nVeuillez trouver ci-joint la facture ${updated.ref} d'un montant de ${eur(updated.totalCents)}.\n\nÉchéance : ${updated.dueDate.toLocaleDateString("fr-FR")}.\n\nCordialement,\nPubleader`;
+
     await sendMail({
       to: recipient,
       subject:
         body.subject ?? `Facture ${updated.ref} — ${eur(updated.totalCents)}`,
-      text:
-        body.message ??
-        `Bonjour,\n\nVeuillez trouver ci-joint la facture ${updated.ref} d'un montant de ${eur(updated.totalCents)}.\n\nÉchéance : ${updated.dueDate.toLocaleDateString("fr-FR")}.\n\nCordialement,\nPubleader`,
+      text: body.message ?? defaultText,
       attachments: [
         {
           filename: `${updated.ref}.pdf`,

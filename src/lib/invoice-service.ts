@@ -50,6 +50,12 @@ export type InvoiceView = Omit<InvoiceDoc, "status"> & {
   storedStatus: InvoiceStoredStatus;
 };
 
+export type StripePaymentRefs = {
+  paymentIntentId?: string;
+  chargeId?: string;
+  checkoutSessionId?: string;
+};
+
 // Atomic per-year sequence counter stored in app_config.
 type InvoiceCounterDoc = {
   _id?: ObjectId;
@@ -290,8 +296,13 @@ export async function markInvoicePaid(
   id: string,
   paidVia?: string,
   paidReference?: string,
+  stripeRefs?: StripePaymentRefs,
 ): Promise<InvoiceView> {
   const current = await getInvoice(id);
+  if (current.storedStatus === "payee") {
+    // Already paid — Stripe webhooks can fire twice; treat as success.
+    return current;
+  }
   if (
     current.storedStatus !== "envoyee" &&
     current.storedStatus !== "brouillon"
@@ -302,16 +313,144 @@ export async function markInvoicePaid(
     );
   }
   const now = new Date();
+  const $set: Record<string, unknown> = {
+    status: "payee",
+    paidAt: now,
+    paidVia: paidVia,
+    paidReference: paidReference,
+    updatedAt: now,
+  };
+  if (stripeRefs?.paymentIntentId) {
+    $set.stripePaymentIntentId = stripeRefs.paymentIntentId;
+  }
+  if (stripeRefs?.chargeId) {
+    $set.stripeChargeId = stripeRefs.chargeId;
+  }
+  if (stripeRefs?.checkoutSessionId) {
+    $set.stripeCheckoutSessionId = stripeRefs.checkoutSessionId;
+  }
+  // Clear refund/dispute markers when a previously-disputed invoice gets
+  // re-paid (rare, but possible after dispute is won).
+  await db.collection(Collections.invoices).updateOne(
+    { _id: new ObjectId(id) },
+    {
+      $set,
+      $unset: {
+        refundedAt: "",
+        refundedReason: "",
+        disputedAt: "",
+        disputedReason: "",
+      },
+    },
+  );
+  return getInvoice(id);
+}
+
+// Records a Checkout Session against the invoice so the webhook handler can
+// look the invoice up by session id. Does not change the stored status.
+export async function attachStripeCheckoutSession(
+  id: string,
+  sessionId: string,
+): Promise<InvoiceView> {
+  const current = await getInvoice(id);
+  if (current.storedStatus === "payee") {
+    throw new InvoiceError(
+      "invalid_status_transition",
+      "invoice already paid",
+    );
+  }
+  const now = new Date();
   await db.collection(Collections.invoices).updateOne(
     { _id: new ObjectId(id) },
     {
       $set: {
-        status: "payee",
-        paidAt: now,
-        paidVia: paidVia,
-        paidReference: paidReference,
+        stripeCheckoutSessionId: sessionId,
         updatedAt: now,
       },
+    },
+  );
+  return getInvoice(id);
+}
+
+export async function findInvoiceByStripeSessionId(
+  sessionId: string,
+): Promise<InvoiceView | null> {
+  const doc = (await db
+    .collection(Collections.invoices)
+    .findOne({ stripeCheckoutSessionId: sessionId })) as InvoiceDoc | null;
+  return doc ? withDerivedStatus(doc) : null;
+}
+
+export async function findInvoiceByStripeChargeId(
+  chargeId: string,
+): Promise<InvoiceView | null> {
+  const doc = (await db
+    .collection(Collections.invoices)
+    .findOne({ stripeChargeId: chargeId })) as InvoiceDoc | null;
+  return doc ? withDerivedStatus(doc) : null;
+}
+
+export async function findInvoiceByStripePaymentIntentId(
+  paymentIntentId: string,
+): Promise<InvoiceView | null> {
+  const doc = (await db
+    .collection(Collections.invoices)
+    .findOne({ stripePaymentIntentId: paymentIntentId })) as InvoiceDoc | null;
+  return doc ? withDerivedStatus(doc) : null;
+}
+
+// Refund / dispute revert the invoice to `envoyee` and stamp a flag so admins
+// can spot it in the UI. We keep stripe ids on the doc so the next webhook
+// (e.g. dispute closed in our favor) can look the invoice up again.
+export async function markInvoiceRefunded(
+  id: string,
+  reason?: string,
+): Promise<InvoiceView> {
+  await getInvoice(id);
+  const now = new Date();
+  await db.collection(Collections.invoices).updateOne(
+    { _id: new ObjectId(id) },
+    {
+      $set: {
+        status: "envoyee",
+        refundedAt: now,
+        refundedReason: reason,
+        updatedAt: now,
+      },
+      $unset: { paidAt: "", paidVia: "", paidReference: "" },
+    },
+  );
+  return getInvoice(id);
+}
+
+export async function markInvoiceDisputed(
+  id: string,
+  reason?: string,
+): Promise<InvoiceView> {
+  await getInvoice(id);
+  const now = new Date();
+  await db.collection(Collections.invoices).updateOne(
+    { _id: new ObjectId(id) },
+    {
+      $set: {
+        status: "envoyee",
+        disputedAt: now,
+        disputedReason: reason,
+        updatedAt: now,
+      },
+    },
+  );
+  return getInvoice(id);
+}
+
+export async function clearInvoiceDispute(id: string): Promise<InvoiceView> {
+  await getInvoice(id);
+  const now = new Date();
+  await db.collection(Collections.invoices).updateOne(
+    { _id: new ObjectId(id) },
+    {
+      $set: { updatedAt: now },
+      $unset: { disputedAt: "", disputedReason: "" },
     },
   );
   return getInvoice(id);
