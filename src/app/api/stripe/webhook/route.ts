@@ -5,6 +5,7 @@ import {
   handleStripeEvent,
 } from "@/lib/stripe-service";
 import { StripeNotConfiguredError } from "@/lib/stripe";
+import { recordAudit } from "@/lib/audit-service";
 
 // Stripe signature verification requires the raw request body. We disable
 // Next's body parsing implicitly by reading req.text() on the App Router
@@ -42,6 +43,12 @@ export async function POST(req: NextRequest) {
 
   try {
     await handleStripeEvent(event);
+    await recordAudit({
+      action: "stripe.webhook.processed",
+      targetType: "stripe_event",
+      targetId: event.id,
+      meta: { type: event.type },
+    });
   } catch (e) {
     // Surfacing 5xx tells Stripe to retry. Log so we know which event failed.
     console.error("[stripe webhook] handler failed", {

@@ -7,6 +7,7 @@ import {
   listReports,
 } from "@/lib/reports/service";
 import { serializeReport } from "@/lib/report-serializer";
+import { actorFromSession, recordAudit } from "@/lib/audit-service";
 
 const STATUS_BY_CODE: Record<string, number> = {
   invalid_type: 400,
@@ -68,6 +69,17 @@ export async function POST(req: NextRequest) {
       type: body.type,
       period: { start, end },
       adminId: auth.user.id,
+    });
+    await recordAudit({
+      ...actorFromSession(auth.user),
+      action: "report.generate",
+      targetType: "report",
+      targetId: report._id?.toString(),
+      meta: {
+        type: body.type,
+        periodStart: body.periodStart,
+        periodEnd: body.periodEnd,
+      },
     });
     return NextResponse.json({ report: serializeReport(report) }, { status: 201 });
   } catch (e) {

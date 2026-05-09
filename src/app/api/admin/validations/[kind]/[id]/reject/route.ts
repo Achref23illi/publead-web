@@ -9,6 +9,7 @@ import {
   type ValidationKind,
   type ValidationRejectReason,
 } from "@/lib/schemas";
+import { actorFromSession, recordAudit } from "@/lib/audit-service";
 
 type Body = { reason?: string; note?: string };
 
@@ -36,6 +37,13 @@ export async function POST(
       body.note,
       auth.user.id,
     );
+    await recordAudit({
+      ...actorFromSession(auth.user),
+      action: "validation.reject",
+      targetType: kind,
+      targetId: id,
+      meta: { reason, note: body.note },
+    });
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof ValidationServiceError) {

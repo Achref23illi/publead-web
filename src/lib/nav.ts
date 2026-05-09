@@ -15,6 +15,7 @@ export type NavId =
   | "reports"
   | "notifications"
   | "users"
+  | "audit"
   | "platform_settings"
   | "settings";
 
@@ -53,6 +54,7 @@ export const NAV: NavEntry[] = [
   { divider: true },
   { caption: "ADMIN" },
   { id: "users", label: "Utilisateurs", icon: "users", href: "/utilisateurs" },
+  { id: "audit", label: "Audit log", icon: "file-text", href: "/audit" },
   { id: "platform_settings", label: "Paramètres plateforme", icon: "sliders", href: "/parametres-plateforme" },
 ];
 
@@ -68,6 +70,7 @@ export function navIdForPath(pathname: string): NavId {
   if (pathname.startsWith("/rapports")) return "reports";
   if (pathname.startsWith("/notifications")) return "notifications";
   if (pathname.startsWith("/utilisateurs")) return "users";
+  if (pathname.startsWith("/audit")) return "audit";
   if (pathname.startsWith("/parametres-plateforme")) return "platform_settings";
   if (pathname.startsWith("/parametres")) return "settings";
   return "dashboard";
@@ -87,6 +90,7 @@ export function titleForPath(pathname: string, campaignName?: string): string {
   if (pathname.startsWith("/rapports")) return "Rapports";
   if (pathname.startsWith("/notifications")) return "Notifications";
   if (pathname.startsWith("/utilisateurs")) return "Utilisateurs";
+  if (pathname.startsWith("/audit")) return "Audit log";
   if (pathname.startsWith("/parametres-plateforme")) return "Paramètres plateforme";
   if (pathname.startsWith("/parametres")) return "Paramètres";
   return "Vue d'ensemble";

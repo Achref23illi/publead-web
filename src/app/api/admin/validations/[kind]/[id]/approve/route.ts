@@ -5,6 +5,7 @@ import {
   ValidationServiceError,
 } from "@/lib/validation-service";
 import { VALIDATION_KINDS, type ValidationKind } from "@/lib/schemas";
+import { actorFromSession, recordAudit } from "@/lib/audit-service";
 
 export async function POST(
   req: NextRequest,
@@ -19,6 +20,12 @@ export async function POST(
   }
   try {
     await approve(kind as ValidationKind, id, auth.user.id);
+    await recordAudit({
+      ...actorFromSession(auth.user),
+      action: "validation.approve",
+      targetType: kind,
+      targetId: id,
+    });
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof ValidationServiceError) {

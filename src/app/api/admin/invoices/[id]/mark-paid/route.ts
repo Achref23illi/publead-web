@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { Collections, type CompanyDoc } from "@/lib/schemas";
 import { InvoiceError, markInvoicePaid } from "@/lib/invoice-service";
 import { serializeInvoice } from "@/lib/finance-serializer";
+import { actorFromSession, recordAudit } from "@/lib/audit-service";
 
 const STATUS_BY_CODE: Record<string, number> = {
   not_found: 404,
@@ -32,6 +33,18 @@ export async function POST(req: NextRequest, ctx: RouteCtx) {
 
   try {
     const invoice = await markInvoicePaid(id, body.paidVia, body.paidReference);
+    await recordAudit({
+      ...actorFromSession(auth.user),
+      action: "invoice.mark_paid",
+      targetType: "invoice",
+      targetId: id,
+      meta: {
+        ref: invoice.ref,
+        paidVia: body.paidVia,
+        paidReference: body.paidReference,
+        totalCents: invoice.totalCents,
+      },
+    });
     let companyName: string | undefined;
     if (ObjectId.isValid(invoice.companyId)) {
       const c = (await db

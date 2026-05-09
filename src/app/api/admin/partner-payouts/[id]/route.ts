@@ -5,6 +5,7 @@ import {
   markPayoutPaid,
 } from "@/lib/partner-revenue-service";
 import { serializePayout } from "@/lib/partner-revenue-serializer";
+import { actorFromSession, recordAudit } from "@/lib/audit-service";
 
 const STATUS_BY_CODE: Record<string, number> = {
   not_found: 404,
@@ -33,6 +34,13 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx) {
   }
   try {
     const payout = await markPayoutPaid(id, auth.user.id, body.payoutReference);
+    await recordAudit({
+      ...actorFromSession(auth.user),
+      action: "partner_payout.mark_paid",
+      targetType: "partner_payout",
+      targetId: id,
+      meta: { payoutReference: body.payoutReference, totalCents: payout.totalCents },
+    });
     return NextResponse.json({ payout: serializePayout(payout) });
   } catch (e) {
     if (e instanceof PartnerRevenueServiceError) {

@@ -6,6 +6,7 @@ import {
   updateSettings,
   type PlatformSettingsPatch,
 } from "@/lib/platform-settings-service";
+import { actorFromSession, recordAudit } from "@/lib/audit-service";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,15 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
   try {
+    const before = await getSettings();
     const updated = await updateSettings(body);
+    await recordAudit({
+      ...actorFromSession(a.user),
+      action: "settings.update",
+      targetType: "platform_settings",
+      before: before as unknown as Record<string, unknown>,
+      after: updated as unknown as Record<string, unknown>,
+    });
     return NextResponse.json(updated);
   } catch (e) {
     if (e instanceof PlatformSettingsError) {

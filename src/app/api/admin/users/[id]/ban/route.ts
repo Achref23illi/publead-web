@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/session";
 import { auth } from "@/lib/auth";
+import { actorFromSession, recordAudit } from "@/lib/audit-service";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -36,6 +37,16 @@ export async function POST(req: NextRequest, ctx: RouteCtx) {
         userId: id,
         banReason: body.reason,
         banExpiresIn: body.expiresInSeconds,
+      },
+    });
+    await recordAudit({
+      ...actorFromSession(a.user),
+      action: "user.ban",
+      targetType: "user",
+      targetId: id,
+      meta: {
+        reason: body.reason,
+        expiresInSeconds: body.expiresInSeconds,
       },
     });
     return NextResponse.json({ ok: true });

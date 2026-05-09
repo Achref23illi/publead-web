@@ -11,6 +11,7 @@ import {
 import { serializeInvoice } from "@/lib/finance-serializer";
 import { buildInvoicePDF } from "@/lib/invoice-pdf";
 import { sendMail } from "@/lib/mailer";
+import { actorFromSession, recordAudit } from "@/lib/audit-service";
 
 const STATUS_BY_CODE: Record<string, number> = {
   not_found: 404,
@@ -93,6 +94,14 @@ export async function POST(req: NextRequest, ctx: RouteCtx) {
           contentType: "application/pdf",
         },
       ],
+    });
+
+    await recordAudit({
+      ...actorFromSession(auth.user),
+      action: "invoice.send",
+      targetType: "invoice",
+      targetId: id,
+      meta: { recipient, ref: updated.ref, totalCents: updated.totalCents },
     });
 
     return NextResponse.json({

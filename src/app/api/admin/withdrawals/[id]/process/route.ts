@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { requireAdmin } from "@/lib/session";
 import { processWithdrawal } from "@/lib/wallet";
+import { actorFromSession, recordAudit } from "@/lib/audit-service";
 
 type Body = {
   decision?: "paid" | "rejected";
@@ -42,6 +43,17 @@ export async function POST(
       decision: body.decision,
       payoutReference: body.payoutReference?.trim(),
       rejectReason: body.rejectReason?.trim(),
+    });
+    await recordAudit({
+      ...actorFromSession(auth.user),
+      action: body.decision === "paid" ? "withdrawal.process" : "withdrawal.reject",
+      targetType: "withdrawal",
+      targetId: id,
+      meta: {
+        decision: body.decision,
+        payoutReference: body.payoutReference?.trim(),
+        rejectReason: body.rejectReason?.trim(),
+      },
     });
     return NextResponse.json({
       withdrawal: {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/session";
 import { auth } from "@/lib/auth";
+import { actorFromSession, recordAudit } from "@/lib/audit-service";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -13,6 +14,12 @@ export async function POST(req: NextRequest, ctx: RouteCtx) {
     await auth.api.unbanUser({
       headers: req.headers,
       body: { userId: id },
+    });
+    await recordAudit({
+      ...actorFromSession(a.user),
+      action: "user.unban",
+      targetType: "user",
+      targetId: id,
     });
     return NextResponse.json({ ok: true });
   } catch (e) {

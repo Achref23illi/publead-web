@@ -961,6 +961,54 @@ export type ReportDoc = {
   requestedAt: Date;
 };
 
+// --- X4 Audit trail + GDPR ---
+
+export type AuditAction =
+  | "user.ban"
+  | "user.unban"
+  | "user.revoke_sessions"
+  | "invoice.send"
+  | "invoice.mark_paid"
+  | "invoice.delete"
+  | "validation.approve"
+  | "validation.reject"
+  | "validation.request_info"
+  | "withdrawal.process"
+  | "withdrawal.reject"
+  | "partner_payout.mark_paid"
+  | "settings.update"
+  | "report.generate"
+  | "report.delete"
+  | "stripe.webhook.processed"
+  | "gdpr.export"
+  | "gdpr.delete";
+
+export type AuditLogDoc = {
+  _id?: ObjectId;
+  // Actor metadata captured at write time. System events (e.g. Stripe webhook)
+  // omit actorUserId.
+  actorUserId?: string;
+  actorEmail?: string;
+  actorRole?: string;
+  action: AuditAction;
+  // Target = resource the action operated on. e.g. ("user", userId).
+  targetType?: string;
+  targetId?: string;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  meta?: Record<string, unknown>;
+  ip?: string;
+  at: Date;
+};
+
+export type GdprDeletionDoc = {
+  _id?: ObjectId;
+  userId: string; // who got anonymized
+  email: string; // pre-anonymization for compliance record
+  role: string;
+  anonymizedAt: Date;
+};
+
 export const Collections = {
   drivers: "drivers",
   companies: "companies",
@@ -989,4 +1037,6 @@ export const Collections = {
   expenses: "expenses",
   stripeEvents: "stripe_events",
   reports: "reports",
+  auditLog: "audit_log",
+  gdprDeletions: "gdpr_deletions",
 } as const;

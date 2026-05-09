@@ -10,6 +10,7 @@ import {
   updateInvoice,
 } from "@/lib/invoice-service";
 import { serializeInvoice } from "@/lib/finance-serializer";
+import { actorFromSession, recordAudit } from "@/lib/audit-service";
 
 const STATUS_BY_CODE: Record<string, number> = {
   not_found: 404,
@@ -99,7 +100,15 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx) {
   if (!auth.ok) return auth.response;
   const { id } = await ctx.params;
   try {
+    const before = await getInvoice(id).catch(() => null);
     await deleteInvoice(id);
+    await recordAudit({
+      ...actorFromSession(auth.user),
+      action: "invoice.delete",
+      targetType: "invoice",
+      targetId: id,
+      before: before ? { ref: before.ref, totalCents: before.totalCents } : undefined,
+    });
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof InvoiceError) {

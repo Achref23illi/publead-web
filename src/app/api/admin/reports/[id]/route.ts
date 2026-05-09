@@ -6,6 +6,7 @@ import {
   getReport,
 } from "@/lib/reports/service";
 import { serializeReport } from "@/lib/report-serializer";
+import { actorFromSession, recordAudit } from "@/lib/audit-service";
 
 const STATUS_BY_CODE: Record<string, number> = {
   not_found: 404,
@@ -37,6 +38,12 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx) {
   const { id } = await ctx.params;
   try {
     await deleteReport(id);
+    await recordAudit({
+      ...actorFromSession(auth.user),
+      action: "report.delete",
+      targetType: "report",
+      targetId: id,
+    });
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof ReportError) {
