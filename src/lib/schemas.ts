@@ -157,6 +157,15 @@ export type CompanyDoc = {
   siret?: string;
   vatNumber?: string;
   legalForm?: "SARL" | "SAS" | "SA" | "EURL" | "Auto-entrepreneur" | "Autre";
+  // Billing — separate from the founder's user email; reflects where AP /
+  // finance receives invoices. stripeCustomerId is set lazily on first
+  // Checkout / Portal call so legacy companies don't need a backfill.
+  billing?: {
+    email?: string;
+    address?: string;
+    note?: string;
+  };
+  stripeCustomerId?: string;
   createdAt: Date;
   // AD1 — admin review trail.
   validation?: ValidationReviewMeta;

@@ -2,68 +2,178 @@
 
 /**
  * EnterpriseFacturation — advertiser billing screen.
- * Balance banner, invoices table with status filter, payment methods,
- * upcoming charges.
+ * Real data from /api/me/billing + /api/me/invoices. Hosted Stripe Customer
+ * Portal for payment-method management; existing /api/me/invoices/[id]/checkout
+ * for paying open invoices.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/Icon";
+import { useToast } from "@/contexts/ToastContext";
+import type {
+  BillingDashboardDTO,
+  BillingProfileDTO,
+} from "@/lib/billing-service";
+import type { InvoiceDTO } from "@/lib/finance-serializer";
 
-type InvoiceStatus = "all" | "paid" | "pending" | "late";
+type StatusFilter = "all" | "envoyee" | "payee" | "en_retard";
 
-interface Invoice {
-  id: string;
-  ref: string;
-  campaign: string;
-  date: string;
-  amount: number;
-  status: Exclude<InvoiceStatus, "all">;
-  due: string;
-}
-
-const INVOICES: Invoice[] = [
-  { id: "i1", ref: "F-2026-0418", campaign: "Nova Printemps", date: "18 avr.", amount: 2400, status: "pending", due: "30 avr." },
-  { id: "i2", ref: "F-2026-0410", campaign: "Nova Bornes Paris", date: "10 avr.", amount: 1820, status: "pending", due: "22 avr." },
-  { id: "i3", ref: "F-2026-0328", campaign: "Nova Flocage Lyon", date: "28 mar.", amount: 1250, status: "paid", due: "10 avr." },
-  { id: "i4", ref: "F-2026-0315", campaign: "Nova Teaser", date: "15 mar.", amount: 940, status: "paid", due: "28 mar." },
-  { id: "i5", ref: "F-2026-0228", campaign: "Nova Printemps — teaser", date: "28 fév.", amount: 1600, status: "paid", due: "12 mar." },
-  { id: "i6", ref: "F-2026-0130", campaign: "Campagne test", date: "30 jan.", amount: 480, status: "late", due: "14 fév." },
-];
-
-const PAYMENT_METHODS = [
-  { id: "p1", brand: "Visa", last4: "4242", exp: "08/28", default: true },
-  { id: "p2", brand: "Mastercard", last4: "8812", exp: "02/27", default: false },
-];
-
-const UPCOMING = [
-  { ref: "Mensualité mai", amount: 2400, date: "01 mai" },
-  { ref: "Flocage Lyon — phase 2", amount: 1150, date: "06 mai" },
-  { ref: "Renouvellement Nova Été", amount: 3200, date: "12 mai" },
-];
-
-const fmtEur = (n: number) => n.toLocaleString("fr-FR") + " €";
-
-const STATUS_LABEL: Record<Exclude<InvoiceStatus, "all">, string> = {
-  paid: "Payée",
-  pending: "À payer",
-  late: "En retard",
+const STATUS_LABEL: Record<InvoiceDTO["status"], string> = {
+  brouillon: "Brouillon",
+  envoyee: "À payer",
+  payee: "Payée",
+  en_retard: "En retard",
 };
 
-export function EnterpriseFacturation() {
-  const [status, setStatus] = useState<InvoiceStatus>("all");
+const STATUS_CHIP: Record<InvoiceDTO["status"], string> = {
+  brouillon: "chip-outline",
+  envoyee: "chip-filled-warning",
+  payee: "chip-success",
+  en_retard: "chip-filled-warning",
+};
 
-  const totals = useMemo(() => {
-    return {
-      paid: INVOICES.filter((i) => i.status === "paid").reduce((s, i) => s + i.amount, 0),
-      pending: INVOICES.filter((i) => i.status === "pending").reduce((s, i) => s + i.amount, 0),
-      late: INVOICES.filter((i) => i.status === "late").reduce((s, i) => s + i.amount, 0),
-    };
+const FILTER_LABEL: Record<StatusFilter, string> = {
+  all: "Toutes",
+  envoyee: "À payer",
+  payee: "Payées",
+  en_retard: "En retard",
+};
+
+const eur = (cents: number) =>
+  `${(cents / 100).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €`;
+
+const fmtDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+
+export function EnterpriseFacturation() {
+  const { pushToast } = useToast();
+  const [dashboard, setDashboard] = useState<BillingDashboardDTO | null>(null);
+  const [invoices, setInvoices] = useState<InvoiceDTO[]>([]);
+  const [filter, setFilter] = useState<StatusFilter>("all");
+  const [loading, setLoading] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [openingPortal, setOpeningPortal] = useState(false);
+  const [paying, setPaying] = useState<string | null>(null);
+
+  // Editable profile form fields (mirror dashboard.profile after fetch).
+  const [billingEmail, setBillingEmail] = useState("");
+  const [billingAddress, setBillingAddress] = useState("");
+  const [billingNote, setBillingNote] = useState("");
+
+  const reload = async () => {
+    setLoading(true);
+    try {
+      const [dashRes, invRes] = await Promise.all([
+        fetch("/api/me/billing", { credentials: "include" }),
+        fetch("/api/me/invoices", { credentials: "include" }),
+      ]);
+      const dash = (await dashRes.json()) as BillingDashboardDTO;
+      const invJson = (await invRes.json()) as { invoices?: InvoiceDTO[] };
+      setDashboard(dash);
+      setInvoices(invJson.invoices ?? []);
+      setBillingEmail(dash.profile.billingEmail ?? "");
+      setBillingAddress(dash.profile.billingAddress ?? "");
+      setBillingNote(dash.profile.billingNote ?? "");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    reload();
   }, []);
 
   const filtered = useMemo(
-    () => INVOICES.filter((i) => status === "all" || i.status === status),
-    [status],
+    () => invoices.filter((i) => filter === "all" || i.status === filter),
+    [invoices, filter],
   );
+
+  const saveProfile = async (e: FormEvent) => {
+    e.preventDefault();
+    setSavingProfile(true);
+    try {
+      const res = await fetch("/api/me/billing", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          billingEmail,
+          billingAddress,
+          billingNote,
+        }),
+      });
+      const data = (await res.json()) as {
+        profile?: BillingProfileDTO;
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        pushToast({
+          kind: "danger",
+          title: "Sauvegarde échouée",
+          desc: data.message ?? data.error ?? "—",
+        });
+      } else {
+        pushToast({ kind: "success", title: "Profil de facturation enregistré" });
+      }
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const openPortal = async () => {
+    setOpeningPortal(true);
+    try {
+      const res = await fetch("/api/me/billing/portal", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ returnUrl: "/enterprise/facturation" }),
+      });
+      const data = (await res.json()) as { url?: string; message?: string };
+      if (!res.ok || !data.url) {
+        pushToast({
+          kind: "danger",
+          title: "Portail indisponible",
+          desc: data.message ?? "Stripe n'est pas configuré",
+        });
+        return;
+      }
+      window.location.href = data.url;
+    } finally {
+      setOpeningPortal(false);
+    }
+  };
+
+  const payInvoice = async (inv: InvoiceDTO) => {
+    setPaying(inv.id);
+    try {
+      const res = await fetch(`/api/me/invoices/${inv.id}/checkout`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = (await res.json()) as { url?: string; message?: string };
+      if (!res.ok || !data.url) {
+        pushToast({
+          kind: "danger",
+          title: "Paiement impossible",
+          desc: data.message ?? "—",
+        });
+        return;
+      }
+      window.location.href = data.url;
+    } finally {
+      setPaying(null);
+    }
+  };
+
+  const metrics = dashboard?.metrics;
+  const profile = dashboard?.profile;
+  const methods = dashboard?.paymentMethods ?? [];
 
   return (
     <div className="glass-page">
@@ -75,14 +185,6 @@ export function EnterpriseFacturation() {
           <p style={{ margin: "4px 0 0", color: "var(--gray-500)", fontSize: 13 }}>
             Factures, paiements et moyens de paiement
           </p>
-        </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button type="button" className="glass-btn ghost">
-            <Icon name="download" size={14} /> Exporter tout
-          </button>
-          <button type="button" className="glass-btn">
-            <Icon name="credit-card" size={14} /> Régler les impayées
-          </button>
         </div>
       </div>
 
@@ -96,226 +198,308 @@ export function EnterpriseFacturation() {
             "0 1px 2px rgba(35,52,102,0.08), 0 28px 60px -24px rgba(35,52,102,0.4), inset 0 1px 0 rgba(255,255,255,0.22)",
         }}
       >
-        <div className="ent-hero-row">
-          <div>
-            <div className="ent-hero-stat-label">Solde à régler</div>
-            <div className="ent-hero-stat-value">{fmtEur(totals.pending + totals.late)}</div>
-            <div className="ent-hero-stat-sub">
-              {INVOICES.filter((i) => i.status !== "paid").length} factures en attente · prochaine échéance 22 avr.
-            </div>
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, auto)",
-              gap: 18,
-              fontSize: 12,
-              color: "rgba(255,255,255,0.85)",
-            }}
-          >
-            <MiniStat label="Payées" value={fmtEur(totals.paid)} />
-            <MiniStat label="À payer" value={fmtEur(totals.pending)} />
-            <MiniStat label="En retard" value={fmtEur(totals.late)} warn />
-          </div>
-        </div>
-      </div>
-
-      {/* Invoices panel */}
-      <div className="glass-panel">
         <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            padding: 16,
-            borderBottom: "1px solid rgba(35,52,102,0.08)",
-          }}
+          className="ent-hero-row"
+          style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 24 }}
         >
-          <h3 style={{ margin: 0, fontSize: 14 }}>Historique des factures</h3>
-          <div className="ent-seg">
-            {(["all", "pending", "late", "paid"] as InvoiceStatus[]).map((s) => (
-              <button
-                key={s}
-                className={status === s ? "active" : ""}
-                onClick={() => setStatus(s)}
-              >
-                {s === "all" ? "Toutes" : STATUS_LABEL[s]}
-              </button>
-            ))}
-          </div>
+          <BannerStat
+            label="Solde dû"
+            value={metrics ? eur(metrics.accountBalanceCents) : "—"}
+            sub={
+              metrics
+                ? `${metrics.pendingCount} facture(s) ouvertes${metrics.overdueCount ? ` · ${metrics.overdueCount} en retard` : ""}`
+                : "—"
+            }
+          />
+          <BannerStat
+            label="Encaissé ce mois"
+            value={metrics ? eur(metrics.mrrCents) : "—"}
+            sub="MRR"
+          />
+          <BannerStat
+            label="Total dépensé"
+            value={metrics ? eur(metrics.totalSpendCents) : "—"}
+            sub="depuis le début"
+          />
+          <BannerStat
+            label="Prochaine échéance"
+            value={
+              metrics?.nextDueDate ? fmtDate(metrics.nextDueDate) : "—"
+            }
+            sub={metrics?.nextDueDate ? "facture la plus ancienne" : "rien d'ouvert"}
+          />
         </div>
-        <table className="glass-table">
-          <thead>
-            <tr>
-              <th>Référence</th>
-              <th>Campagne</th>
-              <th>Émise</th>
-              <th>Échéance</th>
-              <th style={{ textAlign: "right" }}>Montant</th>
-              <th>Statut</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((i) => (
-              <tr key={i.id}>
-                <td style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12 }}>
-                  {i.ref}
-                </td>
-                <td>{i.campaign}</td>
-                <td>{i.date}</td>
-                <td>{i.due}</td>
-                <td style={{ textAlign: "right", fontWeight: 700 }}>{fmtEur(i.amount)}</td>
-                <td>
-                  <span className={`ent-chip ${i.status}`}>{STATUS_LABEL[i.status]}</span>
-                </td>
-                <td style={{ textAlign: "right" }}>
-                  <button
-                    type="button"
-                    className="glass-btn ghost"
-                    style={{ padding: "4px 10px" }}
-                    title="Télécharger PDF"
-                  >
-                    <Icon name="download" size={12} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={7} style={{ padding: 32, textAlign: "center", color: "var(--gray-500)" }}>
-                  Aucune facture ne correspond.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
       </div>
 
-      {/* Payment methods + Upcoming */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginTop: 24 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1.6fr 1fr",
+          gap: 20,
+          marginTop: 24,
+        }}
+      >
         <div className="glass-panel">
           <div className="glass-panelhead">
-            <h3 style={{ margin: 0, fontSize: 14 }}>Moyens de paiement</h3>
-            <button type="button" className="glass-btn ghost">
-              <Icon name="plus" size={12} /> Ajouter
-            </button>
+            <h3 style={{ margin: 0, fontSize: 14 }}>Factures</h3>
+            <div className="ent-seg">
+              {(Object.keys(FILTER_LABEL) as StatusFilter[]).map((k) => (
+                <button
+                  key={k}
+                  className={filter === k ? "active" : ""}
+                  onClick={() => setFilter(k)}
+                >
+                  {FILTER_LABEL[k]}
+                </button>
+              ))}
+            </div>
           </div>
-          <div style={{ padding: 16, display: "grid", gap: 10 }}>
-            {PAYMENT_METHODS.map((p) => (
-              <div
-                key={p.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "12px 14px",
-                  background: "rgba(255,255,255,0.6)",
-                  border: "1px solid rgba(35,52,102,0.08)",
-                  borderRadius: 12,
-                }}
+          <table className="glass-table">
+            <thead>
+              <tr>
+                <th>Référence</th>
+                <th>Émise</th>
+                <th>Échéance</th>
+                <th>Statut</th>
+                <th style={{ textAlign: "right" }}>Montant</th>
+                <th style={{ width: 130 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: "center", padding: 20, color: "var(--gray-500)" }}>
+                    Chargement…
+                  </td>
+                </tr>
+              )}
+              {!loading && filtered.length === 0 && (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: "center", padding: 20, color: "var(--gray-500)" }}>
+                    Aucune facture.
+                  </td>
+                </tr>
+              )}
+              {filtered.map((inv) => (
+                <tr key={inv.id}>
+                  <td style={{ fontWeight: 600 }}>{inv.ref}</td>
+                  <td style={{ fontSize: 12, color: "var(--gray-500)" }}>
+                    {fmtDate(inv.issueDate)}
+                  </td>
+                  <td style={{ fontSize: 12, color: "var(--gray-500)" }}>
+                    {fmtDate(inv.dueDate)}
+                  </td>
+                  <td>
+                    <span className={`chip ${STATUS_CHIP[inv.status]}`}>
+                      {STATUS_LABEL[inv.status]}
+                    </span>
+                  </td>
+                  <td style={{ textAlign: "right", fontWeight: 700 }}>
+                    {eur(inv.totalCents)}
+                  </td>
+                  <td style={{ textAlign: "right" }}>
+                    {(inv.status === "envoyee" || inv.status === "en_retard") && (
+                      <button
+                        type="button"
+                        className="glass-btn"
+                        disabled={paying === inv.id}
+                        onClick={() => payInvoice(inv)}
+                      >
+                        <Icon name="credit-card" size={14} />
+                        {paying === inv.id ? "Redirection…" : "Payer"}
+                      </button>
+                    )}
+                    {inv.status === "payee" && (
+                      <span style={{ fontSize: 11, color: "var(--gray-500)" }}>
+                        {inv.paidAt ? fmtDate(inv.paidAt) : ""}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <div className="glass-panel">
+            <div className="glass-panelhead">
+              <h3 style={{ margin: 0, fontSize: 14 }}>Moyens de paiement</h3>
+              <button
+                type="button"
+                className="glass-btn ghost"
+                onClick={openPortal}
+                disabled={openingPortal}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <Icon name="settings" size={12} />
+                {openingPortal ? "Ouverture…" : "Gérer"}
+              </button>
+            </div>
+            <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+              {!loading && methods.length === 0 && (
+                <div style={{ color: "var(--gray-500)", fontSize: 13 }}>
+                  Aucune carte enregistrée. Cliquez sur « Gérer » pour en
+                  ajouter une via Stripe.
+                </div>
+              )}
+              {methods.map((m) => (
+                <div
+                  key={m.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "12px 14px",
+                    background: "var(--navy-soft)",
+                    borderRadius: 12,
+                  }}
+                >
                   <div
                     style={{
-                      width: 44,
-                      height: 30,
-                      borderRadius: 6,
-                      background: "linear-gradient(135deg, #1e3a8a, #3b82f6)",
+                      width: 36,
+                      height: 24,
+                      borderRadius: 4,
+                      background: "linear-gradient(135deg, #233466, #3A4B8A)",
                       color: "#fff",
-                      fontSize: 10,
+                      fontSize: 9,
                       fontWeight: 700,
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      letterSpacing: "0.04em",
+                      textTransform: "uppercase",
                     }}
                   >
-                    {p.brand.toUpperCase()}
+                    {m.brand}
                   </div>
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 600 }}>
-                      •••• {p.last4}
-                      {p.default && (
-                        <span className="ent-chip info" style={{ marginLeft: 8 }}>
-                          Par défaut
-                        </span>
-                      )}
+                      •••• {m.last4}
                     </div>
-                    <div style={{ fontSize: 11.5, color: "var(--gray-500)" }}>
-                      Expire {p.exp}
+                    <div style={{ fontSize: 11, color: "var(--gray-500)" }}>
+                      Expire {String(m.expMonth).padStart(2, "0")}/{m.expYear}
                     </div>
                   </div>
+                  {m.isDefault && (
+                    <span className="chip chip-success" style={{ fontSize: 10 }}>
+                      Par défaut
+                    </span>
+                  )}
                 </div>
-                <button type="button" className="glass-btn ghost" style={{ padding: "4px 10px" }}>
-                  <Icon name="more-horizontal" size={14} />
-                </button>
-              </div>
-            ))}
-            <div
-              style={{
-                display: "flex",
-                gap: 10,
-                alignItems: "center",
-                padding: "10px 12px",
-                fontSize: 12,
-                color: "var(--gray-500)",
-              }}
-            >
-              <Icon name="info" size={14} /> Les paiements sont sécurisés via Stripe.
+              ))}
             </div>
           </div>
-        </div>
 
-        <div className="glass-panel">
-          <div className="glass-panelhead">
-            <h3 style={{ margin: 0, fontSize: 14 }}>Prochaines échéances</h3>
-          </div>
-          <div style={{ padding: 16, display: "grid", gap: 10 }}>
-            {UPCOMING.map((u) => (
-              <div
-                key={u.ref}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "11px 14px",
-                  background: "var(--navy-soft)",
-                  borderRadius: 10,
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{u.ref}</div>
-                  <div style={{ fontSize: 11.5, color: "var(--gray-500)" }}>
-                    Prévue le {u.date}
-                  </div>
-                </div>
-                <div style={{ fontWeight: 700 }}>{fmtEur(u.amount)}</div>
+          <form onSubmit={saveProfile} className="glass-panel">
+            <div className="glass-panelhead">
+              <h3 style={{ margin: 0, fontSize: 14 }}>Profil de facturation</h3>
+            </div>
+            <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+              <ReadonlyInfo label="Raison sociale" value={profile?.legalName ?? profile?.companyName ?? "—"} />
+              <ReadonlyInfo label="SIRET" value={profile?.siret ?? "—"} />
+              <ReadonlyInfo label="N° TVA" value={profile?.vatNumber ?? "—"} />
+              <Field
+                label="Email de facturation"
+                value={billingEmail}
+                onChange={setBillingEmail}
+                placeholder="ap@entreprise.com"
+                type="email"
+              />
+              <Field
+                label="Adresse de facturation"
+                value={billingAddress}
+                onChange={setBillingAddress}
+                placeholder="123 rue de la Paix, 75002 Paris"
+              />
+              <Field
+                label="Note (mention sur les factures)"
+                value={billingNote}
+                onChange={setBillingNote}
+                placeholder="N° de bon de commande, contact AP…"
+              />
+              <div style={{ textAlign: "right" }}>
+                <button
+                  type="submit"
+                  className="glass-btn"
+                  disabled={savingProfile || loading}
+                >
+                  {savingProfile ? "Sauvegarde…" : "Enregistrer"}
+                </button>
               </div>
-            ))}
-          </div>
+              <div style={{ fontSize: 11, color: "var(--gray-500)" }}>
+                Pour modifier la raison sociale, le SIRET ou la TVA, passez par
+                vos paramètres entreprise (identité légale).
+              </div>
+            </div>
+          </form>
         </div>
       </div>
     </div>
   );
 }
 
-function MiniStat({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
+function BannerStat({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+}) {
   return (
-    <div style={{ minWidth: 120 }}>
-      <div style={{ fontSize: 11, opacity: 0.75, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
-        {label}
-      </div>
-      <div
-        style={{
-          fontSize: 20,
-          fontWeight: 700,
-          color: warn ? "#FCA5A5" : "#fff",
-          marginTop: 2,
-        }}
-      >
+    <div>
+      <div className="ent-hero-stat-label">{label}</div>
+      <div className="ent-hero-stat-value" style={{ fontSize: 26 }}>
         {value}
       </div>
+      <div className="ent-hero-stat-sub">{sub}</div>
     </div>
+  );
+}
+
+function ReadonlyInfo({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--gray-500)" }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 13, color: "var(--black)", marginTop: 2 }}>{value}</div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+}) {
+  return (
+    <label style={{ display: "block" }}>
+      <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--gray-500)" }}>
+        {label}
+      </span>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          display: "block",
+          width: "100%",
+          marginTop: 4,
+          border: "1px solid var(--gray-300)",
+          borderRadius: 8,
+          padding: "8px 10px",
+        }}
+      />
+    </label>
   );
 }

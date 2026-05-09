@@ -98,6 +98,16 @@ export async function createCheckoutSessionForInvoice(input: {
     invoice,
     input.customerEmail,
   );
+  // Reuse the company's Stripe Customer so saved payment methods auto-list
+  // at Checkout and post-payment events tie back to the same customer in
+  // the Stripe Dashboard.
+  let customerId: string | undefined;
+  try {
+    const { ensureStripeCustomer } = await import("./billing-service");
+    customerId = await ensureStripeCustomer(invoice.companyId);
+  } catch {
+    // Best-effort: fall back to email-only Checkout if customer creation fails.
+  }
   const stripe = getStripe();
   const { successUrl, cancelUrl } = stripeReturnUrls(invoice.ref);
   const currency = stripeCurrency();
@@ -131,10 +141,16 @@ export async function createCheckoutSessionForInvoice(input: {
     mode: "payment",
     success_url: successUrl,
     cancel_url: cancelUrl,
-    customer_email: customerEmail,
+    // customer wins over customer_email when both are passed; we pass email
+    // only as fallback when customer creation didn't succeed.
+    ...(customerId
+      ? { customer: customerId }
+      : { customer_email: customerEmail }),
     client_reference_id: invoice._id!.toString(),
     payment_intent_data: {
       description: `Facture ${invoice.ref}`,
+      // Save the card on the customer for future invoice payments.
+      setup_future_usage: customerId ? "off_session" : undefined,
       metadata: {
         invoiceId: invoice._id!.toString(),
         invoiceRef: invoice.ref,
