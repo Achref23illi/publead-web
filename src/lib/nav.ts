@@ -14,6 +14,8 @@ export type NavId =
   | "finances"
   | "reports"
   | "notifications"
+  | "users"
+  | "platform_settings"
   | "settings";
 
 export interface NavItem {
@@ -48,6 +50,10 @@ export const NAV: NavEntry[] = [
   { id: "finances", label: "Finances", icon: "banknote", href: "/finances" },
   { id: "reports", label: "Rapports", icon: "bar-chart-3", href: "/rapports" },
   { id: "notifications", label: "Notifications", icon: "bell", href: "/notifications", badge: 3 },
+  { divider: true },
+  { caption: "ADMIN" },
+  { id: "users", label: "Utilisateurs", icon: "users", href: "/utilisateurs" },
+  { id: "platform_settings", label: "Paramètres plateforme", icon: "sliders", href: "/parametres-plateforme" },
 ];
 
 /** Map Next.js pathname → NavId used by active-state highlighting. */
@@ -61,6 +67,8 @@ export function navIdForPath(pathname: string): NavId {
   if (pathname.startsWith("/finances")) return "finances";
   if (pathname.startsWith("/rapports")) return "reports";
   if (pathname.startsWith("/notifications")) return "notifications";
+  if (pathname.startsWith("/utilisateurs")) return "users";
+  if (pathname.startsWith("/parametres-plateforme")) return "platform_settings";
   if (pathname.startsWith("/parametres")) return "settings";
   return "dashboard";
 }
@@ -78,6 +86,8 @@ export function titleForPath(pathname: string, campaignName?: string): string {
   if (pathname.startsWith("/finances")) return "Finances";
   if (pathname.startsWith("/rapports")) return "Rapports";
   if (pathname.startsWith("/notifications")) return "Notifications";
+  if (pathname.startsWith("/utilisateurs")) return "Utilisateurs";
+  if (pathname.startsWith("/parametres-plateforme")) return "Paramètres plateforme";
   if (pathname.startsWith("/parametres")) return "Paramètres";
   return "Vue d'ensemble";
 }
