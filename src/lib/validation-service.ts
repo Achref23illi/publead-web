@@ -472,12 +472,12 @@ export async function approve(
     },
   );
   const { email, name } = await getEmailAndName(e, kind);
-  await notifyDecision({
+  notifyDecision({
     kind,
     email,
     recipientName: name,
     decision: "approved",
-  });
+  }).catch((err) => console.error("[validation] email failed:", err));
   return loadEntity(kind, id);
 }
 
@@ -509,14 +509,14 @@ export async function reject(
   );
   const { email, name } = await getEmailAndName(e, kind);
   const { VALIDATION_REJECT_REASON_LABELS } = await import("./schemas");
-  await notifyDecision({
+  notifyDecision({
     kind,
     email,
     recipientName: name,
     decision: "rejected",
     reasonLabel: VALIDATION_REJECT_REASON_LABELS[reason],
     note,
-  });
+  }).catch((err) => console.error("[validation] email failed:", err));
   return loadEntity(kind, id);
 }
 
@@ -549,12 +549,12 @@ export async function requestInfo(
     },
   );
   const { email, name } = await getEmailAndName(e, kind);
-  await notifyDecision({
+  notifyDecision({
     kind,
     email,
     recipientName: name,
     decision: "info_requested",
     message: trimmed,
-  });
+  }).catch((err) => console.error("[validation] email failed:", err));
   return loadEntity(kind, id);
 }
