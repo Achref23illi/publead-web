@@ -222,7 +222,7 @@ export function Login() {
             {loading ? "Connexion…" : "Se connecter"}
           </button>
 
-          {process.env.NODE_ENV !== "production" && (
+          {process.env.NEXT_PUBLIC_DEV_LOGIN === "true" && (
             <div style={{ display: "flex", justifyContent: "center", marginTop: 18 }}>
               <a
                 href="/dev-login"
