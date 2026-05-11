@@ -49,6 +49,7 @@ function fmtDelta(delta: number | null): string | null {
 export function DashboardGlass() {
   const [data, setData] = useState<AdminDashboardDTO | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [chartRange, setChartRange] = useState<"30" | "90" | "365">("30");
   const [chart, setChart] = useState<RevenueChartDTO | null>(null);
 
@@ -57,8 +58,19 @@ export function DashboardGlass() {
     (async () => {
       try {
         const r = await fetch("/api/admin/dashboard", { credentials: "include" });
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(
+            `HTTP ${r.status} — ${body.error ?? body.message ?? r.statusText}`,
+          );
+        }
         const json = (await r.json()) as AdminDashboardDTO;
         if (!cancelled) setData(json);
+      } catch (e) {
+        if (!cancelled) {
+          setError((e as Error).message);
+          console.error("[dashboard] fetch failed:", e);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -94,7 +106,7 @@ export function DashboardGlass() {
 
   // Use real revenue points when available; fall back to a synthetic shape.
   const sparkData =
-    chart && chart.points.length > 0
+    chart && chart.points?.length > 0
       ? chart.points.map((p) => p.flocageCents + p.borneCents)
       : data
       ? Array.from({ length: 15 }, (_, i) => 1 + i * 0.5)
@@ -107,6 +119,20 @@ export function DashboardGlass() {
 
   return (
     <div className="glass-page">
+      {error && (
+        <div
+          style={{
+            padding: "12px 16px",
+            background: "#FEE2E2",
+            color: "#991B1B",
+            borderRadius: 12,
+            marginBottom: 16,
+            fontSize: 13,
+          }}
+        >
+          Erreur dashboard : {error}
+        </div>
+      )}
       <div className="glass-pagehead">
         <div>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: 28, margin: 0 }}>

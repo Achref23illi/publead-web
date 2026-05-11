@@ -14,6 +14,11 @@ export type NavId =
   | "finances"
   | "reports"
   | "notifications"
+  | "documents"
+  | "ads"
+  | "partner_payouts"
+  | "withdrawals"
+  | "stock"
   | "users"
   | "audit"
   | "platform_settings"
@@ -47,6 +52,13 @@ export const NAV: NavEntry[] = [
   { caption: "PRODUITS" },
   { id: "campaigns", label: "Campagnes", icon: "megaphone", href: "/campagnes", badge: 9 },
   { id: "bornes", label: "Leader Bornes", icon: "spray-can", href: "/bornes" },
+  { id: "ads", label: "Publicités", icon: "tv", href: "/publicites" },
+  { divider: true },
+  { caption: "OPÉRATIONS" },
+  { id: "documents", label: "Documents", icon: "file-text", href: "/documents" },
+  { id: "stock", label: "Stock", icon: "package", href: "/stock" },
+  { id: "withdrawals", label: "Retraits", icon: "banknote", href: "/retraits" },
+  { id: "partner_payouts", label: "Paiements partenaires", icon: "credit-card", href: "/paiements-partenaires" },
   { divider: true },
   { id: "finances", label: "Finances", icon: "banknote", href: "/finances" },
   { id: "reports", label: "Rapports", icon: "bar-chart-3", href: "/rapports" },
@@ -66,6 +78,11 @@ export function navIdForPath(pathname: string): NavId {
   if (pathname.startsWith("/entreprises")) return "companies";
   if (pathname.startsWith("/campagnes")) return "campaigns";
   if (pathname.startsWith("/bornes")) return "bornes";
+  if (pathname.startsWith("/publicites")) return "ads";
+  if (pathname.startsWith("/documents")) return "documents";
+  if (pathname.startsWith("/stock")) return "stock";
+  if (pathname.startsWith("/retraits")) return "withdrawals";
+  if (pathname.startsWith("/paiements-partenaires")) return "partner_payouts";
   if (pathname.startsWith("/finances")) return "finances";
   if (pathname.startsWith("/rapports")) return "reports";
   if (pathname.startsWith("/notifications")) return "notifications";
@@ -86,6 +103,11 @@ export function titleForPath(pathname: string, campaignName?: string): string {
   if (pathname === "/campagnes/new") return "Nouvelle campagne";
   if (pathname.startsWith("/campagnes/")) return campaignName || "Campagne";
   if (pathname.startsWith("/bornes")) return "Leader Bornes";
+  if (pathname.startsWith("/publicites")) return "Publicités";
+  if (pathname.startsWith("/documents")) return "Documents";
+  if (pathname.startsWith("/stock")) return "Stock";
+  if (pathname.startsWith("/retraits")) return "Retraits";
+  if (pathname.startsWith("/paiements-partenaires")) return "Paiements partenaires";
   if (pathname.startsWith("/finances")) return "Finances";
   if (pathname.startsWith("/rapports")) return "Rapports";
   if (pathname.startsWith("/notifications")) return "Notifications";

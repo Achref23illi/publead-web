@@ -23,12 +23,29 @@ interface PillItem {
   href: string;
 }
 
+// Primary pills visible at all times.
 const PILL_NAV: PillItem[] = [
   { id: "dashboard", label: "Home", href: "/" },
-  { id: "campaigns", label: "Campagnes", href: "/campagnes" },
   { id: "validations", label: "Validations", href: "/validations" },
+  { id: "drivers", label: "Chauffeurs", href: "/chauffeurs" },
+  { id: "companies", label: "Entreprises", href: "/entreprises" },
+  { id: "campaigns", label: "Campagnes", href: "/campagnes" },
   { id: "bornes", label: "Bornes", href: "/bornes" },
   { id: "finances", label: "Finances", href: "/finances" },
+];
+
+// Secondary items in the "Plus" dropdown.
+const MORE_NAV: PillItem[] = [
+  { id: "ads", label: "Publicités", href: "/publicites" },
+  { id: "documents", label: "Documents", href: "/documents" },
+  { id: "stock", label: "Stock", href: "/stock" },
+  { id: "withdrawals", label: "Retraits", href: "/retraits" },
+  { id: "partner_payouts", label: "Paiements partenaires", href: "/paiements-partenaires" },
+  { id: "reports", label: "Rapports", href: "/rapports" },
+  { id: "notifications", label: "Notifications", href: "/notifications" },
+  { id: "users", label: "Utilisateurs", href: "/utilisateurs" },
+  { id: "audit", label: "Audit log", href: "/audit" },
+  { id: "platform_settings", label: "Paramètres plateforme", href: "/parametres-plateforme" },
   { id: "settings", label: "Paramètres", href: "/parametres" },
 ];
 
@@ -39,18 +56,26 @@ export function GlassShell({ children }: GlassShellProps) {
   const { openCmdk, openNotifs } = useUiState();
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click / Escape
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen && !moreOpen) return;
     function onDown(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setMoreOpen(false);
+      }
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setMenuOpen(false);
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        setMoreOpen(false);
+      }
     }
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -58,12 +83,15 @@ export function GlassShell({ children }: GlassShellProps) {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [menuOpen]);
+  }, [menuOpen, moreOpen]);
 
-  // Close the menu whenever the route changes
+  // Close menus whenever the route changes
   useEffect(() => {
     setMenuOpen(false);
+    setMoreOpen(false);
   }, [pathname]);
+
+  const moreActive = MORE_NAV.some((m) => m.id === current);
 
   function handleSignOut() {
     setMenuOpen(false);
@@ -93,6 +121,64 @@ export function GlassShell({ children }: GlassShellProps) {
                 {t.label}
               </Link>
             ))}
+            <div ref={moreRef} style={{ position: "relative" }}>
+              <button
+                type="button"
+                className={"p-item" + (moreActive || moreOpen ? " active" : "")}
+                onClick={() => setMoreOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={moreOpen}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer",
+                  font: "inherit",
+                }}
+              >
+                Plus <Icon name="chevron-down" size={12} />
+              </button>
+              {moreOpen && (
+                <div
+                  role="menu"
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 8px)",
+                    right: 0,
+                    background: "#fff",
+                    border: "1px solid rgba(0,0,0,0.08)",
+                    borderRadius: 14,
+                    boxShadow: "0 12px 32px rgba(0,0,0,0.12)",
+                    padding: 8,
+                    minWidth: 240,
+                    zIndex: 100,
+                  }}
+                >
+                  {MORE_NAV.map((t) => (
+                    <Link
+                      key={t.id}
+                      href={t.href}
+                      role="menuitem"
+                      onClick={() => setMoreOpen(false)}
+                      style={{
+                        display: "block",
+                        padding: "8px 12px",
+                        borderRadius: 10,
+                        fontSize: 13,
+                        textDecoration: "none",
+                        color: current === t.id ? "var(--navy)" : "var(--gray-700)",
+                        fontWeight: current === t.id ? 700 : 500,
+                        background: current === t.id ? "var(--navy-soft)" : "transparent",
+                      }}
+                    >
+                      {t.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <div className="glass-top-right">
             <button
