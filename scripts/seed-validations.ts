@@ -7,7 +7,7 @@
  */
 import { auth } from "../src/lib/auth";
 import { db, mongoClient } from "../src/lib/db";
-import { Collections, REQUIRED_DOC_TYPES } from "../src/lib/schemas";
+import { Collections, DOC_TYPE_META, REQUIRED_DOC_TYPES } from "../src/lib/schemas";
 
 type PendingDriver = {
   email: string;
@@ -228,20 +228,19 @@ async function createPendingDriver(d: PendingDriver) {
   // Synthetic uploaded documents (status: pending — awaiting admin review).
   for (let i = 0; i < d.docsUploaded; i++) {
     const type = REQUIRED_DOC_TYPES[i];
+    const fileCount = DOC_TYPE_META[type].requiredCount;
     await db.collection(Collections.documents).insertOne({
       driverId,
       type,
       status: "pending",
-      files: [
-        {
-          publicId: `seed/${driverId}/${type}`,
-          url: `https://res.cloudinary.com/demo/image/upload/sample.jpg`,
-          resourceType: "image",
-          format: "jpg",
-          bytes: 120_000,
-          uploadedAt: now,
-        },
-      ],
+      files: Array.from({ length: fileCount }, (_, fi) => ({
+        publicId: `seed/${driverId}/${type}/${fi}`,
+        url: `https://res.cloudinary.com/demo/image/upload/sample.jpg`,
+        resourceType: "image",
+        format: "jpg",
+        bytes: 120_000,
+        uploadedAt: now,
+      })),
       createdAt: now,
       updatedAt: now,
     });

@@ -266,6 +266,49 @@ function DetailSheet({ itemId, kind, onClose, onChange }: DetailSheetProps) {
   const [reject, setReject] = useState(false);
   const [info, setInfo] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [docBusy, setDocBusy] = useState<Record<string, boolean>>({});
+
+  const approveDoc = async (docId: string) => {
+    setDocBusy((p) => ({ ...p, [docId]: true }));
+    try {
+      const res = await fetch(`/api/admin/documents/${docId}/approve`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const d = (await res.json()) as { error?: string };
+        throw new Error(d.error ?? "approve failed");
+      }
+      await reload();
+    } catch (e) {
+      pushToast({ kind: "danger", title: "Erreur", desc: (e as Error).message });
+    } finally {
+      setDocBusy((p) => ({ ...p, [docId]: false }));
+    }
+  };
+
+  const rejectDoc = async (docId: string) => {
+    const reason = window.prompt("Motif de rejet :");
+    if (!reason?.trim()) return;
+    setDocBusy((p) => ({ ...p, [docId]: true }));
+    try {
+      const res = await fetch(`/api/admin/documents/${docId}/reject`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reason.trim() }),
+      });
+      if (!res.ok) {
+        const d = (await res.json()) as { error?: string };
+        throw new Error(d.error ?? "reject failed");
+      }
+      await reload();
+    } catch (e) {
+      pushToast({ kind: "danger", title: "Erreur", desc: (e as Error).message });
+    } finally {
+      setDocBusy((p) => ({ ...p, [docId]: false }));
+    }
+  };
 
   const reload = async () => {
     setLoading(true);
@@ -538,7 +581,7 @@ function DetailSheet({ itemId, kind, onClose, onChange }: DetailSheetProps) {
                       </div>
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: 6 }}>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     {d.files.map((f, i) => (
                       <a
                         key={i}
@@ -550,6 +593,26 @@ function DetailSheet({ itemId, kind, onClose, onChange }: DetailSheetProps) {
                         Voir #{i + 1}
                       </a>
                     ))}
+                    {d.status !== "approved" && (
+                      <button
+                        type="button"
+                        className="btn btn-primary compact"
+                        disabled={!!docBusy[d.id]}
+                        onClick={() => approveDoc(d.id)}
+                      >
+                        {docBusy[d.id] ? "…" : "Approuver"}
+                      </button>
+                    )}
+                    {d.status !== "rejected" && (
+                      <button
+                        type="button"
+                        className="btn btn-outline compact"
+                        disabled={!!docBusy[d.id]}
+                        onClick={() => rejectDoc(d.id)}
+                      >
+                        {docBusy[d.id] ? "…" : "Rejeter"}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
