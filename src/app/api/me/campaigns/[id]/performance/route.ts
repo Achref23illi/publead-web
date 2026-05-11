@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdvertiser } from "@/lib/session";
+import { requireAdvertiserOrAdmin } from "@/lib/session";
 import {
   PERFORMANCE_PERIODS,
   getCampaignPerformance,
@@ -11,8 +11,8 @@ export const dynamic = "force-dynamic";
 type RouteCtx = { params: Promise<{ id: string }> };
 
 export async function GET(req: NextRequest, ctx: RouteCtx) {
-  const a = await requireAdvertiser(req.headers);
-  if (!a.ok) return a.response;
+  const auth = await requireAdvertiserOrAdmin(req.headers);
+  if (!auth.ok) return auth.response;
   const { id } = await ctx.params;
   const url = new URL(req.url);
   const periodParam = url.searchParams.get("period") ?? "30d";
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest, ctx: RouteCtx) {
     ? (periodParam as PerformancePeriod)
     : "30d";
 
-  const data = await getCampaignPerformance(a.user.companyId!, id, period);
+  const data = await getCampaignPerformance(auth.companyId, id, period);
   if (!data) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }

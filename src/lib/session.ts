@@ -168,3 +168,41 @@ export async function requireAdmin(
   }
   return s;
 }
+
+/** Allows both advertisers/team_members (companyId = their company) and admins (companyId = null = bypass ownership). */
+export async function requireAdvertiserOrAdmin(
+  headers: Headers,
+): Promise<
+  | { ok: true; user: SessionUser; companyId: string | null }
+  | { ok: false; response: NextResponse }
+> {
+  const s = await requireSession(headers);
+  if (!s.ok) return s;
+
+  if (s.user.role === "admin") {
+    return { ok: true, user: s.user, companyId: null };
+  }
+
+  if (s.user.role !== "advertiser" && s.user.role !== "team_member") {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "forbidden" }, { status: 403 }),
+    };
+  }
+  if (!s.user.companyId) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "company profile missing" }, { status: 409 }),
+    };
+  }
+  const company = (await db
+    .collection(Collections.companies)
+    .findOne({ _id: new ObjectId(s.user.companyId) })) as CompanyDoc | null;
+  if (!company) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "company not found" }, { status: 404 }),
+    };
+  }
+  return { ok: true, user: s.user, companyId: s.user.companyId };
+}

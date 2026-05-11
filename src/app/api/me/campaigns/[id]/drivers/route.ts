@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdvertiser } from "@/lib/session";
+import { requireAdvertiserOrAdmin } from "@/lib/session";
 import {
   CampaignServiceError,
   assignDriver,
@@ -22,17 +22,11 @@ const STATUS_BY_CODE: Record<string, number> = {
 type RouteCtx = { params: Promise<{ id: string }> };
 
 export async function GET(req: NextRequest, ctx: RouteCtx) {
-  const auth = await requireAdvertiser(req.headers);
+  const auth = await requireAdvertiserOrAdmin(req.headers);
   if (!auth.ok) return auth.response;
-  if (!auth.company._id) {
-    return NextResponse.json({ error: "company missing" }, { status: 409 });
-  }
   const { id } = await ctx.params;
   try {
-    const drivers = await listAssignedDrivers(
-      auth.company._id.toString(),
-      id,
-    );
+    const drivers = await listAssignedDrivers(auth.companyId, id);
     return NextResponse.json({ drivers });
   } catch (e) {
     if (e instanceof CampaignServiceError) {
@@ -47,11 +41,8 @@ export async function GET(req: NextRequest, ctx: RouteCtx) {
 }
 
 export async function POST(req: NextRequest, ctx: RouteCtx) {
-  const auth = await requireAdvertiser(req.headers);
+  const auth = await requireAdvertiserOrAdmin(req.headers);
   if (!auth.ok) return auth.response;
-  if (!auth.company._id) {
-    return NextResponse.json({ error: "company missing" }, { status: 409 });
-  }
   const { id } = await ctx.params;
   let body: { driverId?: string };
   try {
@@ -63,11 +54,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx) {
     return NextResponse.json({ error: "missing_driverId" }, { status: 400 });
   }
   try {
-    const doc = await assignDriver(
-      auth.company._id.toString(),
-      id,
-      body.driverId,
-    );
+    const doc = await assignDriver(auth.companyId, id, body.driverId);
     const brandMap = await loadBrandMap([doc]);
     return NextResponse.json({
       campaign: serializeCampaign(doc, brandMap.get(doc.companyId)),

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdvertiser } from "@/lib/session";
+import { requireAdvertiserOrAdmin } from "@/lib/session";
 import {
   CampaignServiceError,
   deleteDraftCampaign,
@@ -32,14 +32,11 @@ const STATUS_BY_CODE: Record<string, number> = {
 type RouteCtx = { params: Promise<{ id: string }> };
 
 export async function GET(req: NextRequest, ctx: RouteCtx) {
-  const auth = await requireAdvertiser(req.headers);
+  const auth = await requireAdvertiserOrAdmin(req.headers);
   if (!auth.ok) return auth.response;
-  if (!auth.company._id) {
-    return NextResponse.json({ error: "company missing" }, { status: 409 });
-  }
   const { id } = await ctx.params;
   try {
-    const doc = await getMyCampaign(auth.company._id.toString(), id);
+    const doc = await getMyCampaign(auth.companyId, id);
     const reconciled = reconcileMany([doc])[0];
     const brandMap = await loadBrandMap([reconciled]);
     return NextResponse.json({
@@ -58,11 +55,8 @@ export async function GET(req: NextRequest, ctx: RouteCtx) {
 }
 
 export async function PATCH(req: NextRequest, ctx: RouteCtx) {
-  const auth = await requireAdvertiser(req.headers);
+  const auth = await requireAdvertiserOrAdmin(req.headers);
   if (!auth.ok) return auth.response;
-  if (!auth.company._id) {
-    return NextResponse.json({ error: "company missing" }, { status: 409 });
-  }
   const { id } = await ctx.params;
   let body: unknown;
   try {
@@ -71,11 +65,7 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx) {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
   try {
-    const doc = await updateCampaign(
-      auth.company._id.toString(),
-      id,
-      body as never,
-    );
+    const doc = await updateCampaign(auth.companyId, id, body as never);
     const brandMap = await loadBrandMap([doc]);
     return NextResponse.json({
       campaign: serializeCampaign(doc, brandMap.get(doc.companyId)),
@@ -93,14 +83,11 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx) {
 }
 
 export async function DELETE(req: NextRequest, ctx: RouteCtx) {
-  const auth = await requireAdvertiser(req.headers);
+  const auth = await requireAdvertiserOrAdmin(req.headers);
   if (!auth.ok) return auth.response;
-  if (!auth.company._id) {
-    return NextResponse.json({ error: "company missing" }, { status: 409 });
-  }
   const { id } = await ctx.params;
   try {
-    await deleteDraftCampaign(auth.company._id.toString(), id);
+    await deleteDraftCampaign(auth.companyId, id);
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof CampaignServiceError) {

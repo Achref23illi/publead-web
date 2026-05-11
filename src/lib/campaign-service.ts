@@ -1,4 +1,4 @@
-import { ObjectId } from "mongodb";
+import { ObjectId, type Filter } from "mongodb";
 import { db } from "./db";
 import {
   Collections,
@@ -171,15 +171,18 @@ async function loadCompany(companyId: string): Promise<CompanyDoc> {
 }
 
 async function loadCampaignDoc(
-  companyId: string,
+  companyId: string | null,
   campaignId: string,
 ): Promise<CampaignDoc> {
   if (!ObjectId.isValid(campaignId)) {
     throw new CampaignServiceError("not_found");
   }
+  const filter = companyId
+    ? { _id: new ObjectId(campaignId), companyId }
+    : { _id: new ObjectId(campaignId) };
   const doc = (await db
     .collection(Collections.campaigns)
-    .findOne({ _id: new ObjectId(campaignId), companyId })) as CampaignDoc | null;
+    .findOne(filter)) as CampaignDoc | null;
   if (!doc) throw new CampaignServiceError("not_found");
   return doc;
 }
@@ -299,6 +302,56 @@ export async function createDraftCampaign(
   return { ...doc, _id: ins.insertedId };
 }
 
+/**
+ * Duplicates a campaign as a new draft. Copies brief/zones/budget/etc.
+ * Resets status to "draft", clears assignedDriverIds, kmDone, progress.
+ * Admin (companyId=null) can duplicate any campaign within its own company.
+ */
+export async function duplicateCampaign(
+  companyId: string | null,
+  campaignId: string,
+): Promise<CampaignDoc> {
+  const src = await loadCampaignDoc(companyId, campaignId);
+  const now = new Date();
+  const copy: Omit<CampaignDoc, "_id"> = {
+    companyId: src.companyId,
+    brand: src.brand,
+    domain: src.domain,
+    title: `${src.title} (copie)`,
+    description: src.description,
+    campaignType: src.campaignType,
+    budgetTier: src.budgetTier,
+    budgetCents: src.budgetCents,
+    city: src.city,
+    zones: [...src.zones],
+    startDate: src.startDate,
+    endDate: src.endDate,
+    durationDays: src.durationDays,
+    rewardCents: src.rewardCents,
+    status: "draft",
+    progress: 0,
+    kmDone: 0,
+    kmTotal: src.kmTotal,
+    driversNeeded: src.driversNeeded,
+    driversAssigned: 0,
+    assignedDriverIds: [],
+    trackingMode: src.trackingMode,
+    heroImageUrl: src.heroImageUrl,
+    assetIds: src.assetIds ? [...src.assetIds] : undefined,
+    borne: src.borne
+      ? {
+          count: src.borne.count,
+          targetImpressions: src.borne.targetImpressions,
+          terminalIds: [],
+        }
+      : undefined,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const ins = await db.collection(Collections.campaigns).insertOne(copy as CampaignDoc);
+  return { ...copy, _id: ins.insertedId } as CampaignDoc;
+}
+
 export async function listMyCampaigns(
   companyId: string,
   status?: CampaignDoc["status"],
@@ -313,7 +366,7 @@ export async function listMyCampaigns(
 }
 
 export async function getMyCampaign(
-  companyId: string,
+  companyId: string | null,
   campaignId: string,
 ): Promise<CampaignDoc> {
   return loadCampaignDoc(companyId, campaignId);
@@ -331,7 +384,7 @@ const FROZEN_KEYS_AFTER_PUBLISH = new Set<keyof CampaignDoc>([
 ]);
 
 export async function updateCampaign(
-  companyId: string,
+  companyId: string | null,
   campaignId: string,
   patch: CampaignUpdateInput,
 ): Promise<CampaignDoc> {
@@ -494,16 +547,17 @@ export async function publishCampaign(
 }
 
 export async function deleteDraftCampaign(
-  companyId: string,
+  companyId: string | null,
   campaignId: string,
 ): Promise<void> {
   const existing = await loadCampaignDoc(companyId, campaignId);
   if (existing.status !== "draft") {
     throw new CampaignServiceError("draft_only");
   }
-  await db
-    .collection(Collections.campaigns)
-    .deleteOne({ _id: new ObjectId(campaignId), companyId, status: "draft" });
+  const filter = companyId
+    ? { _id: new ObjectId(campaignId), companyId, status: "draft" }
+    : { _id: new ObjectId(campaignId), status: "draft" };
+  await db.collection(Collections.campaigns).deleteOne(filter);
 }
 
 // --- Assignment (A5) -------------------------------------------------------
@@ -550,7 +604,7 @@ function ensureBorne(campaign: CampaignDoc): void {
  * available for advertiser-driven assignment.
  */
 export async function listEligibleDrivers(
-  companyId: string,
+  companyId: string | null,
   campaignId: string,
 ): Promise<EligibleDriverDTO[]> {
   const campaign = await loadCampaignDoc(companyId, campaignId);
@@ -597,7 +651,7 @@ export async function listEligibleDrivers(
 
 /** Joins assignedDriverIds[] -> driver docs for the detail view. */
 export async function listAssignedDrivers(
-  companyId: string,
+  companyId: string | null,
   campaignId: string,
 ): Promise<AssignedDriverDTO[]> {
   const campaign = await loadCampaignDoc(companyId, campaignId);
@@ -623,7 +677,7 @@ export async function listAssignedDrivers(
 }
 
 export async function assignDriver(
-  companyId: string,
+  companyId: string | null,
   campaignId: string,
   driverId: string,
 ): Promise<CampaignDoc> {
@@ -656,16 +710,17 @@ export async function assignDriver(
   if (busy) throw new CampaignServiceError("driver_busy");
 
   // Atomic claim — same gate the driver-side accept uses.
+  const assignFilter = {
+    _id: new ObjectId(campaignId),
+    ...(companyId ? { companyId } : {}),
+    status: { $in: ["upcoming", "active"] },
+    $expr: { $lt: ["$driversAssigned", "$driversNeeded"] },
+    assignedDriverIds: { $ne: driverId },
+  } as Filter<CampaignDoc>;
   const updated = (await db
     .collection<CampaignDoc>(Collections.campaigns)
     .findOneAndUpdate(
-      {
-        _id: new ObjectId(campaignId),
-        companyId,
-        status: { $in: ["upcoming", "active"] },
-        $expr: { $lt: ["$driversAssigned", "$driversNeeded"] },
-        assignedDriverIds: { $ne: driverId },
-      },
+      assignFilter,
       {
         $inc: { driversAssigned: 1 },
         $push: { assignedDriverIds: driverId },
@@ -701,7 +756,7 @@ export async function assignDriver(
 }
 
 export async function unassignDriver(
-  companyId: string,
+  companyId: string | null,
   campaignId: string,
   driverId: string,
 ): Promise<CampaignDoc> {
@@ -710,14 +765,15 @@ export async function unassignDriver(
   if (!campaign.assignedDriverIds.includes(driverId)) {
     throw new CampaignServiceError("not_found", "driver not assigned");
   }
+  const unassignFilter = {
+    _id: new ObjectId(campaignId),
+    ...(companyId ? { companyId } : {}),
+    assignedDriverIds: driverId,
+  } as Filter<CampaignDoc>;
   const updated = (await db
     .collection<CampaignDoc>(Collections.campaigns)
     .findOneAndUpdate(
-      {
-        _id: new ObjectId(campaignId),
-        companyId,
-        assignedDriverIds: driverId,
-      },
+      unassignFilter,
       {
         $inc: { driversAssigned: -1 },
         $pull: { assignedDriverIds: driverId },
@@ -741,7 +797,7 @@ export async function unassignDriver(
 // --- Borne terminal assignment --------------------------------------------
 
 export async function assignTerminal(
-  companyId: string,
+  companyId: string | null,
   campaignId: string,
   terminalId: string,
 ): Promise<CampaignDoc> {
@@ -777,14 +833,15 @@ export async function assignTerminal(
   if (current.length >= (campaign.borne?.count ?? 0)) {
     throw new CampaignServiceError("campaign_full");
   }
+  const terminalAssignFilter = {
+    _id: new ObjectId(campaignId),
+    ...(companyId ? { companyId } : {}),
+    "borne.terminalIds": { $ne: trimmed },
+  } as Filter<CampaignDoc>;
   const updated = (await db
     .collection<CampaignDoc>(Collections.campaigns)
     .findOneAndUpdate(
-      {
-        _id: new ObjectId(campaignId),
-        companyId,
-        "borne.terminalIds": { $ne: trimmed },
-      },
+      terminalAssignFilter,
       {
         $push: { "borne.terminalIds": trimmed },
         $set: { updatedAt: new Date() },
@@ -804,7 +861,7 @@ export async function assignTerminal(
 }
 
 export async function unassignTerminal(
-  companyId: string,
+  companyId: string | null,
   campaignId: string,
   terminalId: string,
 ): Promise<CampaignDoc> {
@@ -814,10 +871,14 @@ export async function unassignTerminal(
   if (!(campaign.borne?.terminalIds ?? []).includes(trimmed)) {
     throw new CampaignServiceError("not_found");
   }
+  const terminalUnassignFilter = {
+    _id: new ObjectId(campaignId),
+    ...(companyId ? { companyId } : {}),
+  } as Filter<CampaignDoc>;
   const updated = (await db
     .collection<CampaignDoc>(Collections.campaigns)
     .findOneAndUpdate(
-      { _id: new ObjectId(campaignId), companyId },
+      terminalUnassignFilter,
       {
         $pull: { "borne.terminalIds": trimmed },
         $set: { updatedAt: new Date() },

@@ -72,7 +72,7 @@ export function DashboardGlass() {
     ? Array.from({ length: 15 }, (_, i) => 1 + i * 0.5)
     : [];
 
-  const mrr = data?.finance.collectedCents ?? 0;
+  const mrr = data?.finance?.collectedCents ?? 0;
   const mrrDelta = data ? fmtDelta(data.mrrDelta) : null;
   const fleet = data?.fleet;
   const counts = data?.counts;

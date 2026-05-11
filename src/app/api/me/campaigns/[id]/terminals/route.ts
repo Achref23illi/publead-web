@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdvertiser } from "@/lib/session";
+import { requireAdvertiserOrAdmin } from "@/lib/session";
 import {
   CampaignServiceError,
   assignTerminal,
@@ -19,11 +19,8 @@ const STATUS_BY_CODE: Record<string, number> = {
 type RouteCtx = { params: Promise<{ id: string }> };
 
 export async function POST(req: NextRequest, ctx: RouteCtx) {
-  const auth = await requireAdvertiser(req.headers);
+  const auth = await requireAdvertiserOrAdmin(req.headers);
   if (!auth.ok) return auth.response;
-  if (!auth.company._id) {
-    return NextResponse.json({ error: "company missing" }, { status: 409 });
-  }
   const { id } = await ctx.params;
   let body: { terminalId?: string };
   try {
@@ -36,7 +33,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx) {
   }
   try {
     const doc = await assignTerminal(
-      auth.company._id.toString(),
+      auth.companyId,
       id,
       body.terminalId,
     );

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdvertiser } from "@/lib/session";
+import { requireAdvertiserOrAdmin } from "@/lib/session";
 import {
   AssetServiceError,
   createAsset,
@@ -18,13 +18,16 @@ const STATUS_BY_CODE: Record<string, number> = {
 };
 
 export async function GET(req: NextRequest) {
-  const auth = await requireAdvertiser(req.headers);
+  const auth = await requireAdvertiserOrAdmin(req.headers);
   if (!auth.ok) return auth.response;
-  if (!auth.company._id) {
-    return NextResponse.json({ error: "company missing" }, { status: 409 });
+  let companyId = auth.companyId;
+  if (!companyId) {
+    const url = new URL(req.url);
+    companyId = url.searchParams.get("companyId");
+    if (!companyId) return NextResponse.json({ assets: [] });
   }
   try {
-    const assets = await listAssets(auth.company._id.toString());
+    const assets = await listAssets(companyId);
     return NextResponse.json({ assets });
   } catch (e) {
     console.error("[GET /api/me/assets]", e);
@@ -33,10 +36,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAdvertiser(req.headers);
+  const auth = await requireAdvertiserOrAdmin(req.headers);
   if (!auth.ok) return auth.response;
-  if (!auth.company._id) {
-    return NextResponse.json({ error: "company missing" }, { status: 409 });
+  if (!auth.companyId) {
+    return NextResponse.json({ error: "company required" }, { status: 409 });
   }
   let body: {
     type?: string;
@@ -59,7 +62,7 @@ export async function POST(req: NextRequest) {
   }
   try {
     const asset = await createAsset({
-      companyId: auth.company._id.toString(),
+      companyId: auth.companyId,
       uploadedBy: auth.user.id,
       type: String(body.type ?? ""),
       name: String(body.name ?? ""),

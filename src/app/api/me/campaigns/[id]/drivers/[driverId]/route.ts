@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdvertiser } from "@/lib/session";
+import { requireAdvertiserOrAdmin } from "@/lib/session";
 import {
   CampaignServiceError,
   unassignDriver,
@@ -15,18 +15,11 @@ const STATUS_BY_CODE: Record<string, number> = {
 type RouteCtx = { params: Promise<{ id: string; driverId: string }> };
 
 export async function DELETE(req: NextRequest, ctx: RouteCtx) {
-  const auth = await requireAdvertiser(req.headers);
+  const auth = await requireAdvertiserOrAdmin(req.headers);
   if (!auth.ok) return auth.response;
-  if (!auth.company._id) {
-    return NextResponse.json({ error: "company missing" }, { status: 409 });
-  }
   const { id, driverId } = await ctx.params;
   try {
-    const doc = await unassignDriver(
-      auth.company._id.toString(),
-      id,
-      driverId,
-    );
+    const doc = await unassignDriver(auth.companyId, id, driverId);
     const brandMap = await loadBrandMap([doc]);
     return NextResponse.json({
       campaign: serializeCampaign(doc, brandMap.get(doc.companyId)),

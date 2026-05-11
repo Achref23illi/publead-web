@@ -254,15 +254,18 @@ export async function getCompanyPerformance(
 }
 
 export async function getCampaignPerformance(
-  companyId: string,
+  companyId: string | null,
   campaignId: string,
   period: PerformancePeriod,
   now: Date = new Date(),
 ): Promise<CampaignPerformanceDTO | null> {
   if (!ObjectId.isValid(campaignId)) return null;
+  const filter = companyId
+    ? { _id: new ObjectId(campaignId), companyId }
+    : { _id: new ObjectId(campaignId) };
   const c = (await db
     .collection(Collections.campaigns)
-    .findOne({ _id: new ObjectId(campaignId), companyId })) as CampaignDoc | null;
+    .findOne(filter)) as CampaignDoc | null;
   if (!c) return null;
 
   const { start, end, days } = buildWindow(period, now);

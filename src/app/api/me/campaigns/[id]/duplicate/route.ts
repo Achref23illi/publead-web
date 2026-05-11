@@ -2,24 +2,27 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdvertiserOrAdmin } from "@/lib/session";
 import {
   CampaignServiceError,
-  listEligibleDrivers,
+  duplicateCampaign,
 } from "@/lib/campaign-service";
+import { loadBrandMap, serializeCampaign } from "@/lib/campaign-serializer";
 
 const STATUS_BY_CODE: Record<string, number> = {
   not_found: 404,
   forbidden: 403,
-  wrong_type: 409,
 };
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
-export async function GET(req: NextRequest, ctx: RouteCtx) {
+export async function POST(req: NextRequest, ctx: RouteCtx) {
   const auth = await requireAdvertiserOrAdmin(req.headers);
   if (!auth.ok) return auth.response;
   const { id } = await ctx.params;
   try {
-    const drivers = await listEligibleDrivers(auth.companyId, id);
-    return NextResponse.json({ drivers });
+    const doc = await duplicateCampaign(auth.companyId, id);
+    const brandMap = await loadBrandMap([doc]);
+    return NextResponse.json({
+      campaign: serializeCampaign(doc, brandMap.get(doc.companyId)),
+    });
   } catch (e) {
     if (e instanceof CampaignServiceError) {
       return NextResponse.json(
@@ -27,7 +30,7 @@ export async function GET(req: NextRequest, ctx: RouteCtx) {
         { status: STATUS_BY_CODE[e.code] ?? 400 },
       );
     }
-    console.error("[GET eligible-drivers]", e);
+    console.error("[POST /api/me/campaigns/:id/duplicate]", e);
     return NextResponse.json({ error: "internal" }, { status: 500 });
   }
 }

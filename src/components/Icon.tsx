@@ -15,7 +15,8 @@ export type IconName =
   | "user" | "pause-circle" | "copy" | "trash" | "refresh" | "message-square"
   | "credit-card" | "tv" | "image" | "check-circle" | "x-circle" | "command"
   | "zap" | "euro" | "package" | "map" | "wrench" | "sliders" | "layout-grid"
-  | "menu" | "list" | "grid" | "truck" | "plug" | "code";
+  | "menu" | "list" | "grid" | "truck" | "plug" | "code"
+  | "edit" | "external-link" | "monitor";
 
 export interface IconProps {
   name: IconName;
@@ -108,6 +109,9 @@ export function Icon({ name, size = 20, stroke = 1.5, className = "", style }: I
     case "truck": return <svg {...props}><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>;
     case "plug": return <svg {...props}><path d="M12 22v-5"/><path d="M9 7V2"/><path d="M15 7V2"/><path d="M6 13V8a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v5a6 6 0 1 1-12 0"/></svg>;
     case "code": return <svg {...props}><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>;
+    case "edit": return <svg {...props}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>;
+    case "external-link": return <svg {...props}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>;
+    case "monitor": return <svg {...props}><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>;
     default: return <svg {...props}><circle cx="12" cy="12" r="8"/></svg>;
   }
 }

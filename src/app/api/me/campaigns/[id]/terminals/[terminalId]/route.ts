@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdvertiser } from "@/lib/session";
+import { requireAdvertiserOrAdmin } from "@/lib/session";
 import {
   CampaignServiceError,
   unassignTerminal,
@@ -15,15 +15,12 @@ const STATUS_BY_CODE: Record<string, number> = {
 type RouteCtx = { params: Promise<{ id: string; terminalId: string }> };
 
 export async function DELETE(req: NextRequest, ctx: RouteCtx) {
-  const auth = await requireAdvertiser(req.headers);
+  const auth = await requireAdvertiserOrAdmin(req.headers);
   if (!auth.ok) return auth.response;
-  if (!auth.company._id) {
-    return NextResponse.json({ error: "company missing" }, { status: 409 });
-  }
   const { id, terminalId } = await ctx.params;
   try {
     const doc = await unassignTerminal(
-      auth.company._id.toString(),
+      auth.companyId,
       id,
       decodeURIComponent(terminalId),
     );
